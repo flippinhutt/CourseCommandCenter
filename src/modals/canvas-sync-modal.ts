@@ -23,6 +23,15 @@ export class CanvasSyncModal extends Modal {
 			const matched = matches.filter((m) => m.matchedNote);
 			const unmatched = matches.filter((m) => !m.matchedNote);
 
+			// Persist the raw events *before* touching anything else — this is
+			// what a plain Refresh (which never re-fetches) reads from, via
+			// plugin.getCurrentCanvasMatches(). Without this, Refresh had
+			// nothing to work with and silently wiped the dashboard file's
+			// Canvas-derived lines on every click.
+			this.plugin.settings.lastCanvasEvents = events;
+			this.plugin.settings.lastCanvasSyncedAt = new Date().toISOString();
+			await this.plugin.saveSettings();
+
 			let updatedCount = 0;
 			for (const match of matched) {
 				const applied = await applyCanvasDueDate(this.app, match);
@@ -34,7 +43,7 @@ export class CanvasSyncModal extends Modal {
 			// not a stale pre-sync snapshot.
 			if (updatedCount > 0) this.plugin.noteIndex.rebuildNow();
 
-			const dashboardResult = await this.plugin.updateDashboardFileIfConfigured(unmatched);
+			const dashboardResult = await this.plugin.updateDashboardFileIfConfigured();
 			const dashboardStatus =
 				dashboardResult.status === "written"
 					? `Dashboard file (${this.plugin.settings.dashboardFilePath}) updated.`

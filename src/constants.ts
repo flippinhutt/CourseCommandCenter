@@ -18,6 +18,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	canvasIcsUrl: "",
 	dashboardFilePath: "",
 	doNextWindowDays: 2,
+	lastCanvasEvents: [],
+	lastCanvasSyncedAt: null,
 };
 
 /** Stamped near the top of every generated dashboard file so a future write

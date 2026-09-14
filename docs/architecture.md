@@ -22,12 +22,32 @@ choice, and both shaped the module boundaries below:
 main.ts                          Plugin entry point: registers the view,
                                   commands, ribbon icon, settings tab, and
                                   vault/metadata-cache event listeners.
+
+                                  getCurrentCanvasMatches() is the one place
+                                  that turns "the last sync's raw events"
+                                  (settings.lastCanvasEvents, persisted to
+                                  data.json) into "matches against the
+                                  vault right now" (re-run every call, no
+                                  network). Both the dashboard file and the
+                                  live view call this instead of caching
+                                  their own copy — a note created since the
+                                  last sync drops out of "unmatched"
+                                  immediately, and a plain Refresh (no new
+                                  fetch) still reflects Canvas data instead
+                                  of needing a fresh sync to avoid going
+                                  blank. This replaced an earlier design
+                                  where callers passed their own
+                                  CanvasSyncMatch[] through — Refresh had
+                                  none to pass, so every Refresh silently
+                                  wiped whatever the last sync had written.
+
                                   Also owns pendingCanvasNotes (an in-memory
-                                  path -> CanvasSyncMatch map, refreshed by
+                                  path -> CanvasSyncMatch map, rebuilt from
+                                  getCurrentCanvasMatches() by
                                   updateDashboardFileIfConfigured) and the
                                   vault "create" listener that consults it:
-                                  clicking a dashboard-file wikilink for an
-                                  unmatched Canvas event makes Obsidian
+                                  clicking a Canvas item's wikilink (in the
+                                  dashboard file or the view) makes Obsidian
                                   create a blank note, and this is what
                                   turns that blank note into a properly
                                   templated one.
@@ -48,7 +68,19 @@ src/
                                   NoteIndexService and renders it; contains
                                   no frontmatter-writing or file-creation
                                   logic itself — it delegates to modals and
-                                  services for anything that mutates state.
+                                  services for anything that mutates state
+                                  (an unmatched Canvas item's click handler
+                                  calls createNoteForCanvasEvent directly,
+                                  same as the sync modal's button). "Do
+                                  next" and "Upcoming deadlines" render a
+                                  DisplayItem union (a vault note or an
+                                  unmatched CanvasSyncMatch from
+                                  plugin.getCurrentCanvasMatches()) so both
+                                  sources sort into one chronological list;
+                                  "Current work"/"Recently created"/
+                                  "Feedback to process" only ever contain
+                                  note items, since Canvas-only entries have
+                                  no type/status until a note exists.
 
   modals/
     create-note-modal.ts         Collects a title (+ optional due date),

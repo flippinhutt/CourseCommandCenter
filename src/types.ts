@@ -99,6 +99,16 @@ export interface PluginSettings {
 	/** "Do next" window, in days, for the dashboard file's most-urgent
 	 * section. "Current work" reuses upcomingDeadlineWindowDays. */
 	doNextWindowDays: number;
+	/** Raw events from the most recent successful Canvas sync. Internal
+	 * cache, not a user-facing setting (no Settings UI field) — persisted
+	 * here anyway since Obsidian plugins only get one data.json. Re-matched
+	 * against the *current* note index on every dashboard/view refresh, so
+	 * a Refresh with no new Canvas fetch still reflects Canvas due dates
+	 * instead of wiping them, and a note created since the last sync
+	 * correctly drops out of the "unmatched" set without needing a re-sync. */
+	lastCanvasEvents: IcsEvent[];
+	/** ISO timestamp of the last successful sync, or null if never synced. */
+	lastCanvasSyncedAt: string | null;
 }
 
 /** Parsed frontmatter properties the plugin cares about; all optional. */

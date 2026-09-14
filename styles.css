@@ -86,6 +86,11 @@
 	margin: 4px 0;
 }
 
+.course-command-center-canvas-tag {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
 .course-command-center-task-done {
 	text-decoration: line-through;
 	color: var(--text-muted);

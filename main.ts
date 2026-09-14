@@ -12,7 +12,7 @@ import { DashboardInsertModal, buildDashboardBlock } from "./src/modals/dashboar
 import { CanvasSyncModal } from "./src/modals/canvas-sync-modal";
 import { activeCourses, deriveQuickActions, isInPersonLike } from "./src/services/course-service";
 import { updateDashboardFile } from "./src/services/dashboard-file-service";
-import { pendingCanvasNotePath } from "./src/services/canvas-match";
+import { matchCanvasEvents, pendingCanvasNotePath } from "./src/services/canvas-match";
 import { populateExistingNote } from "./src/services/template-service";
 import type { CanvasSyncMatch, OptionalPluginStatus } from "./src/types";
 
@@ -101,37 +101,37 @@ export default class CourseCommandCenterPlugin extends Plugin {
 		this.noteIndex.requestRefresh();
 	}
 
-	/** Regenerates the dashboard file, if one is configured, from the current
-	 * (already up to date — callers rebuild the index first if needed) note
-	 * index. Never throws: returns a status the caller can inspect, and also
-	 * shows a Notice on failure for callers that don't check the return
-	 * value (e.g. the view's Refresh button).
-	 *
-	 * `canvasMatches` — pass the full match list from a just-completed sync
-	 * to also refresh the pending-notes cache used by
-	 * handlePossibleCanvasNoteCreation; omit it (not just `[]`, which means
-	 * "sync ran and found nothing unmatched") for a plain Refresh with no
-	 * new Canvas data, which leaves the previous cache as-is. */
-	async updateDashboardFileIfConfigured(
-		canvasMatches?: CanvasSyncMatch[]
-	): Promise<{ status: "disabled" | "written" | "error"; message?: string }> {
-		if (canvasMatches) {
-			this.pendingCanvasNotes = new Map(
-				canvasMatches
-					.filter((match) => !match.matchedNote)
-					.map((match) => [pendingCanvasNotePath(match), match] as const)
-					.filter((entry): entry is [string, CanvasSyncMatch] => entry[0] !== null)
-			);
-		}
+	/** The current picture of Canvas data: the last sync's raw events,
+	 * re-matched against the *current* note index and course list every time
+	 * this is called. Never re-fetches — that only happens in
+	 * syncCanvasCalendar. This is what makes Refresh (and everything else)
+	 * durable: a note created or deleted since the last sync is reflected
+	 * immediately, and nothing needs a network call to redraw correctly.
+	 * Returns [] if there's never been a successful sync. */
+	getCurrentCanvasMatches(): CanvasSyncMatch[] {
+		if (this.settings.lastCanvasEvents.length === 0) return [];
+		return matchCanvasEvents(this.settings.lastCanvasEvents, this.noteIndex.getNotes(), activeCourses(this.settings.courses));
+	}
+
+	/** Regenerates the dashboard file, if one is configured, and refreshes
+	 * the pending-notes cache used by handlePossibleCanvasNoteCreation —
+	 * both always derived fresh from getCurrentCanvasMatches(), so calling
+	 * this after a plain Refresh (no new Canvas fetch) still includes
+	 * whatever the last sync found instead of wiping it. Never throws:
+	 * returns a status the caller can inspect, and also shows a Notice on
+	 * failure for callers that don't check the return value. */
+	async updateDashboardFileIfConfigured(): Promise<{ status: "disabled" | "written" | "error"; message?: string }> {
+		const canvasMatches = this.getCurrentCanvasMatches();
+		this.pendingCanvasNotes = new Map(
+			canvasMatches
+				.filter((match) => !match.matchedNote)
+				.map((match) => [pendingCanvasNotePath(match), match] as const)
+				.filter((entry): entry is [string, CanvasSyncMatch] => entry[0] !== null)
+		);
+
 		if (!this.settings.dashboardFilePath.trim()) return { status: "disabled" };
 		try {
-			await updateDashboardFile(
-				this.app,
-				this.noteIndex.getNotes(),
-				activeCourses(this.settings.courses),
-				this.settings,
-				canvasMatches ?? []
-			);
+			await updateDashboardFile(this.app, this.noteIndex.getNotes(), activeCourses(this.settings.courses), this.settings, canvasMatches);
 			return { status: "written" };
 		} catch (error) {
 			const message = error instanceof Error ? error.message : "unknown error";

@@ -1,18 +1,38 @@
 import { ItemView, TFile, WorkspaceLeaf } from "obsidian";
 import type CourseCommandCenterPlugin from "../../main";
 import { CSS_PREFIX, PLUGIN_VIEW_TYPE } from "../constants";
-import type { CourseConfig, IndexedNote } from "../types";
-import { activeCourses, deriveQuickActions } from "../services/course-service";
+import type { CanvasSyncMatch, CourseConfig, IndexedNote } from "../types";
+import { activeCourses, deriveQuickActions, folderForArtifact, isInPersonLike } from "../services/course-service";
 import { compareDueDates, dueState, formatHumanDate, parseLocalDate } from "../utils/dates";
 import { CreateNoteModal } from "../modals/create-note-modal";
 import { AssignmentDetailModal } from "../modals/assignment-detail-modal";
 import { runHealthCheck } from "../services/health-check-service";
 import { HealthCheckModal } from "../modals/health-check-modal";
+import { createNoteForCanvasEvent } from "../services/canvas-sync-service";
 
 const ALL_COURSES = "__all__";
 
 const CURRENT_WORK_TYPES: string[] = ["assignment", "project-deliverable", "module", "sql-lab", "discussion", "lecture"];
 const ACTIVE_STATUSES = new Set(["not-started", "in-progress", "blocked", "reviewing"]);
+
+/** A row shown in a due-date-driven section: either a real vault note, or a
+ * Canvas event with no note yet. "Current work"/"Recently created"/
+ * "Feedback to process" only ever contain "note" items — Canvas-only items
+ * have no type/status until a note is created for them, which is exactly
+ * what clicking one does. */
+type DisplayItem = { kind: "note"; note: IndexedNote } | { kind: "canvas"; match: CanvasSyncMatch };
+
+function noteItem(note: IndexedNote): { kind: "note"; note: IndexedNote } {
+	return { kind: "note", note };
+}
+
+function itemDue(item: DisplayItem): string | undefined {
+	return item.kind === "note" ? item.note.props.due : (item.match.event.due ?? undefined);
+}
+
+function itemKey(item: DisplayItem): string {
+	return item.kind === "note" ? item.note.path : `canvas:${item.match.event.uid}`;
+}
 
 export class CourseCommandCenterView extends ItemView {
 	private selectedCourseId: string = ALL_COURSES;
@@ -56,6 +76,16 @@ export class CourseCommandCenterView extends ItemView {
 		const notes = this.notes();
 		if (this.selectedCourseId === ALL_COURSES) return notes;
 		return notes.filter((n) => n.courseId === this.selectedCourseId);
+	}
+
+	/** Canvas events with no matching vault note yet, for the current course
+	 * selection. Re-derived from the plugin's persisted Canvas data every
+	 * render — no separate fetch, so this stays correct across a plain
+	 * Refresh and reflects notes created since the last sync. */
+	private canvasItemsForSelection(): CanvasSyncMatch[] {
+		const unmatched = this.plugin.getCurrentCanvasMatches().filter((m) => !m.matchedNote);
+		if (this.selectedCourseId === ALL_COURSES) return unmatched;
+		return unmatched.filter((m) => m.matchedCourse?.id === this.selectedCourseId);
 	}
 
 	render(): void {
@@ -119,10 +149,11 @@ export class CourseCommandCenterView extends ItemView {
 		const summary = container.createDiv({ cls: `${CSS_PREFIX}-summary` });
 		const notes = this.notesForSelection();
 		const windowDays = this.plugin.settings.upcomingDeadlineWindowDays;
+		const dueDates = [...notes.map((n) => n.props.due), ...this.canvasItemsForSelection().map((m) => m.event.due ?? undefined)];
 
-		const overdue = notes.filter((n) => dueState(n.props.due, windowDays) === "overdue").length;
-		const dueSoon = notes.filter((n) => {
-			const state = dueState(n.props.due, windowDays);
+		const overdue = dueDates.filter((due) => dueState(due, windowDays) === "overdue").length;
+		const dueSoon = dueDates.filter((due) => {
+			const state = dueState(due, windowDays);
 			return state === "today" || state === "upcoming";
 		}).length;
 		const activeAssignments = notes.filter(
@@ -172,7 +203,7 @@ export class CourseCommandCenterView extends ItemView {
 		}
 	}
 
-	private renderSection(container: HTMLElement, id: string, title: string, items: IndexedNote[]): void {
+	private renderSection(container: HTMLElement, id: string, title: string, items: DisplayItem[]): void {
 		const section = container.createDiv({ cls: `${CSS_PREFIX}-section` });
 		const heading = section.createEl("button", {
 			cls: `${CSS_PREFIX}-section-toggle`,
@@ -194,10 +225,56 @@ export class CourseCommandCenterView extends ItemView {
 		}
 
 		const list = body.createEl("ul");
-		for (const note of items) {
+		for (const item of items) {
 			const li = list.createEl("li");
-			const link = li.createEl("a", { text: this.describeNote(note), cls: "internal-link" });
-			this.bindNoteClick(link, note);
+			const link = li.createEl("a", { text: this.describeItem(item), cls: "internal-link" });
+			this.bindItemClick(link, item);
+			if (item.kind === "canvas" && item.match.event.url) {
+				const canvasUrl = item.match.event.url;
+				const canvasLink = li.createEl("a", { text: " (Canvas)", cls: `${CSS_PREFIX}-canvas-tag` });
+				canvasLink.addEventListener("click", (evt) => {
+					evt.preventDefault();
+					window.open(canvasUrl, "_blank");
+				});
+			}
+		}
+	}
+
+	private describeItem(item: DisplayItem): string {
+		if (item.kind === "note") return this.describeNote(item.note);
+		const course = item.match.matchedCourse ? ` (${item.match.matchedCourse.displayName})` : "";
+		return `${item.match.event.title} — due ${item.match.event.due}${course} [Canvas, click to create note]`;
+	}
+
+	private bindItemClick(link: HTMLElement, item: DisplayItem): void {
+		if (item.kind === "note") {
+			this.bindNoteClick(link, item.note);
+			return;
+		}
+		link.addEventListener("click", (evt) => {
+			evt.preventDefault();
+			void this.createNoteForCanvasItem(item.match);
+		});
+		link.setAttribute("title", "Click to create a note for this Canvas item.");
+	}
+
+	private async createNoteForCanvasItem(match: CanvasSyncMatch): Promise<void> {
+		if (!match.matchedCourse) return;
+		try {
+			const folder = folderForArtifact(match.matchedCourse, "assignment");
+			const file = await createNoteForCanvasEvent(
+				this.app,
+				match,
+				folder,
+				this.plugin.settings.templatesFolder,
+				this.plugin.getOptionalPluginStatus().templater,
+				isInPersonLike(match.matchedCourse)
+			);
+			this.plugin.noteIndex.rebuildNow();
+			void this.plugin.updateDashboardFileIfConfigured();
+			await this.app.workspace.getLeaf(false).openFile(file);
+		} catch (error) {
+			console.error("Course Command Center: failed to create note from the view", error);
 		}
 	}
 
@@ -220,47 +297,56 @@ export class CourseCommandCenterView extends ItemView {
 		return `${note.basename}${due}${status}`;
 	}
 
-	private buildDoNext(): IndexedNote[] {
+	private buildDoNext(): DisplayItem[] {
 		const windowDays = this.plugin.settings.upcomingDeadlineWindowDays;
-		const notes = this.notesForSelection();
-		const overdue = notes.filter((n) => dueState(n.props.due, windowDays) === "overdue");
-		const dueToday = notes.filter((n) => dueState(n.props.due, windowDays) === "today");
-		const dueSoon = notes.filter((n) => dueState(n.props.due, windowDays) === "upcoming");
-		const noDueInProgress = notes.filter((n) => !n.props.due && n.props.status === "in-progress");
+		const noteItems = this.notesForSelection().map(noteItem);
+		const canvasItems: DisplayItem[] = this.canvasItemsForSelection().map((match) => ({ kind: "canvas", match }));
+		const dated = [...noteItems, ...canvasItems];
+
+		const overdue = dated.filter((i) => dueState(itemDue(i), windowDays) === "overdue");
+		const dueToday = dated.filter((i) => dueState(itemDue(i), windowDays) === "today");
+		const dueSoon = dated.filter((i) => dueState(itemDue(i), windowDays) === "upcoming");
+		const noDueInProgress = noteItems.filter((i) => !i.note.props.due && i.note.props.status === "in-progress");
 
 		const seen = new Set<string>();
-		const ordered: IndexedNote[] = [];
+		const ordered: DisplayItem[] = [];
 		for (const group of [overdue, dueToday, dueSoon, noDueInProgress]) {
-			for (const note of group.sort((a, b) => compareDueDates(a.props.due, b.props.due))) {
-				if (seen.has(note.path)) continue;
-				seen.add(note.path);
-				ordered.push(note);
+			for (const item of group.sort((a, b) => compareDueDates(itemDue(a), itemDue(b)))) {
+				const key = itemKey(item);
+				if (seen.has(key)) continue;
+				seen.add(key);
+				ordered.push(item);
 			}
 		}
 		return ordered;
 	}
 
-	private buildCurrentWork(): IndexedNote[] {
-		return this.notesForSelection().filter(
-			(n) => n.props.type && CURRENT_WORK_TYPES.includes(n.props.type) && ACTIVE_STATUSES.has(n.props.status ?? "")
-		);
-	}
-
-	private buildUpcoming(): IndexedNote[] {
+	private buildCurrentWork(): DisplayItem[] {
 		return this.notesForSelection()
-			.filter((n) => Boolean(parseLocalDate(n.props.due)))
-			.sort((a, b) => compareDueDates(a.props.due, b.props.due));
+			.filter((n) => n.props.type && CURRENT_WORK_TYPES.includes(n.props.type) && ACTIVE_STATUSES.has(n.props.status ?? ""))
+			.map(noteItem);
 	}
 
-	private buildRecent(): IndexedNote[] {
+	private buildUpcoming(): DisplayItem[] {
+		const noteItems: DisplayItem[] = this.notesForSelection()
+			.filter((n) => Boolean(parseLocalDate(n.props.due)))
+			.map(noteItem);
+		const canvasItems: DisplayItem[] = this.canvasItemsForSelection().map((match) => ({ kind: "canvas", match }));
+		return [...noteItems, ...canvasItems].sort((a, b) => compareDueDates(itemDue(a), itemDue(b)));
+	}
+
+	private buildRecent(): DisplayItem[] {
 		return this.notesForSelection()
 			.slice()
 			.sort((a, b) => b.ctime - a.ctime)
-			.slice(0, this.plugin.settings.recentNotesCount);
+			.slice(0, this.plugin.settings.recentNotesCount)
+			.map(noteItem);
 	}
 
-	private buildFeedback(): IndexedNote[] {
-		return this.notesForSelection().filter((n) => n.props.type === "feedback" && n.props.status !== "complete");
+	private buildFeedback(): DisplayItem[] {
+		return this.notesForSelection()
+			.filter((n) => n.props.type === "feedback" && n.props.status !== "complete")
+			.map(noteItem);
 	}
 
 	private renderArtifactsSection(container: HTMLElement): void {
