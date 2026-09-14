@@ -126,6 +126,38 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 				})
 			);
 
+		containerEl.createEl("h3", { text: "Dashboard file (optional)" });
+		containerEl.createEl("p", {
+			text:
+				"Leave the path empty to disable. When set, this note is fully regenerated (Deadlines / Current work / " +
+				"Do next sections) every time you click Refresh in the view, and after a Canvas sync — never automatically " +
+				"in the background. Manual edits to it are overwritten on the next update.",
+			cls: "setting-item-description",
+		});
+		new Setting(containerEl)
+			.setName("Dashboard file path")
+			.addText((text) =>
+				text
+					.setPlaceholder("e.g. Dashboard.md")
+					.setValue(this.plugin.settings.dashboardFilePath)
+					.onChange(async (value) => {
+						this.plugin.settings.dashboardFilePath = value.trim();
+						await this.plugin.saveSettings();
+					})
+			);
+		new Setting(containerEl)
+			.setName("Do next window (days)")
+			.setDesc('The dashboard file\'s "Do next" section: due today, overdue, or within this many days.')
+			.addText((text) =>
+				text.setValue(String(this.plugin.settings.doNextWindowDays)).onChange(async (value) => {
+					const num = Number(value);
+					if (Number.isFinite(num) && num >= 0) {
+						this.plugin.settings.doNextWindowDays = Math.floor(num);
+						await this.plugin.saveSettings();
+					}
+				})
+			);
+
 		containerEl.createEl("h3", { text: "Canvas calendar sync (optional)" });
 		containerEl.createEl("p", {
 			text:

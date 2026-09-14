@@ -90,7 +90,10 @@ export class CourseCommandCenterView extends ItemView {
 
 		const buttons = header.createDiv({ cls: `${CSS_PREFIX}-header-buttons` });
 		const refreshBtn = buttons.createEl("button", { text: "Refresh", attr: { "aria-label": "Refresh Course Command Center" } });
-		refreshBtn.addEventListener("click", () => this.plugin.noteIndex.rebuildNow());
+		refreshBtn.addEventListener("click", () => {
+			this.plugin.noteIndex.rebuildNow();
+			void this.plugin.updateDashboardFileIfConfigured();
+		});
 
 		const healthBtn = buttons.createEl("button", { text: "Run course health check", attr: { "aria-label": "Run course health check" } });
 		healthBtn.addEventListener("click", () => void this.runHealthCheck());

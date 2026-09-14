@@ -11,7 +11,8 @@ import { CreateNoteModal } from "./src/modals/create-note-modal";
 import { DashboardInsertModal, buildDashboardBlock } from "./src/modals/dashboard-insert-modal";
 import { CanvasSyncModal } from "./src/modals/canvas-sync-modal";
 import { activeCourses, deriveQuickActions } from "./src/services/course-service";
-import type { OptionalPluginStatus } from "./src/types";
+import { updateDashboardFile } from "./src/services/dashboard-file-service";
+import type { CanvasSyncMatch, OptionalPluginStatus } from "./src/types";
 
 export default class CourseCommandCenterPlugin extends Plugin {
 	settings: PluginSettings = DEFAULT_SETTINGS;
@@ -80,6 +81,20 @@ export default class CourseCommandCenterPlugin extends Plugin {
 		this.noteIndex.requestRefresh();
 	}
 
+	/** Regenerates the dashboard file, if one is configured, from the current
+	 * (already up to date — callers rebuild the index first if needed) note
+	 * index. No-ops silently when dashboardFilePath is empty; shows a Notice
+	 * on write failure (e.g. a path collision with an unrelated file). */
+	async updateDashboardFileIfConfigured(canvasMatches: CanvasSyncMatch[] = []): Promise<void> {
+		if (!this.settings.dashboardFilePath.trim()) return;
+		try {
+			await updateDashboardFile(this.app, this.noteIndex.getNotes(), activeCourses(this.settings.courses), this.settings, canvasMatches);
+		} catch (error) {
+			new Notice(`Could not update the dashboard file: ${error instanceof Error ? error.message : "unknown error"}`);
+			console.error("Course Command Center: dashboard file update failed", error);
+		}
+	}
+
 	/** Re-registers quick-action commands from the current course/folder-map
 	 * settings. Obsidian's command registry keys by id, so calling this again
 	 * after editing settings updates existing entries and adds new ones;
@@ -132,14 +147,7 @@ export default class CourseCommandCenterPlugin extends Plugin {
 			new Notice("Add your Canvas calendar feed URL in Settings → Course Command Center first.");
 			return;
 		}
-		new CanvasSyncModal(this.app, {
-			icsUrl: this.settings.canvasIcsUrl.trim(),
-			notes: this.noteIndex.getNotes(),
-			courses: activeCourses(this.settings.courses),
-			templatesFolder: this.settings.templatesFolder,
-			templaterInstalled: this.getOptionalPluginStatus().templater,
-			onSynced: () => this.noteIndex.requestRefresh(),
-		}).open();
+		new CanvasSyncModal(this.app, this).open();
 	}
 
 	private async runHealthCheckCommand(): Promise<void> {

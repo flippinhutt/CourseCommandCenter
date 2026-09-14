@@ -117,6 +117,20 @@ src/
                                   template-service. Re-exports
                                   matchCanvasEvents from canvas-match.ts so
                                   callers only need one import.
+    dashboard-content.ts          Pure: builds the sorted Deadlines pool
+                                  (buildDashboardLines) from IndexedNote[] +
+                                  unmatched CanvasSyncMatch[], and renders it
+                                  to Markdown (buildDashboardMarkdown) with
+                                  overlapping Deadlines/Current work/Do next
+                                  sections. No Obsidian API — same reasoning
+                                  as canvas-match.ts.
+    dashboard-file-service.ts    Obsidian-API side: writes dashboard-
+                                  content.ts's output to the configured
+                                  path via vault.create/modify. Refuses to
+                                  overwrite a pre-existing file that lacks
+                                  the DASHBOARD_FILE_MARKER string, so a
+                                  settings-path typo can't clobber an
+                                  unrelated note.
 
   utils/
     dates.ts                     Local-calendar-date parsing/formatting and
@@ -141,8 +155,8 @@ src/
 
 ## Why the pure-function / service / UI split
 
-- `utils/` and `services/health-check-rules.ts` / `services/canvas-match.ts`
-  take no Obsidian `App` dependency and do no I/O — they're the layer the
+- `utils/` and `services/health-check-rules.ts` / `services/canvas-match.ts` /
+  `services/dashboard-content.ts` take no Obsidian `App` dependency and do no I/O — they're the layer the
   unit tests exercise directly (course-code matching, date/due-state math,
   filename sanitization, rubric-table parsing, health-check rule evaluation,
   ICS parsing, Canvas-event-to-note matching). This split isn't just a style

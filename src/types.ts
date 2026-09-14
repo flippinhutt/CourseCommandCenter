@@ -92,6 +92,13 @@ export interface PluginSettings {
 	 * plugin's no-network-calls rule: fetched only when the user explicitly
 	 * runs "Sync Canvas calendar," never automatically or in the background. */
 	canvasIcsUrl: string;
+	/** Vault-relative path of an auto-generated summary note (Deadlines /
+	 * Current work / Do next sections). Empty string disables the feature —
+	 * nothing is ever written unless this is set. */
+	dashboardFilePath: string;
+	/** "Do next" window, in days, for the dashboard file's most-urgent
+	 * section. "Current work" reuses upcomingDeadlineWindowDays. */
+	doNextWindowDays: number;
 }
 
 /** Parsed frontmatter properties the plugin cares about; all optional. */

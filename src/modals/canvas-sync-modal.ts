@@ -1,19 +1,11 @@
 import { App, Modal, Notice, Setting } from "obsidian";
-import type { CanvasSyncMatch, CourseConfig, IndexedNote } from "../types";
+import type CourseCommandCenterPlugin from "../../main";
+import type { CanvasSyncMatch } from "../types";
 import { applyCanvasDueDate, createNoteForCanvasEvent, fetchCanvasEvents, matchCanvasEvents } from "../services/canvas-sync-service";
-import { folderForArtifact, isInPersonLike } from "../services/course-service";
-
-export interface CanvasSyncModalParams {
-	icsUrl: string;
-	notes: IndexedNote[];
-	courses: CourseConfig[];
-	templatesFolder: string;
-	templaterInstalled: boolean;
-	onSynced: () => void;
-}
+import { activeCourses, folderForArtifact, isInPersonLike } from "../services/course-service";
 
 export class CanvasSyncModal extends Modal {
-	constructor(app: App, private params: CanvasSyncModalParams) {
+	constructor(app: App, private plugin: CourseCommandCenterPlugin) {
 		super(app);
 	}
 
@@ -24,8 +16,9 @@ export class CanvasSyncModal extends Modal {
 		const statusEl = contentEl.createEl("p", { text: "Fetching your Canvas calendar feed…" });
 
 		try {
-			const events = await fetchCanvasEvents(this.params.icsUrl);
-			const matches = matchCanvasEvents(events, this.params.notes, this.params.courses);
+			const courses = activeCourses(this.plugin.settings.courses);
+			const events = await fetchCanvasEvents(this.plugin.settings.canvasIcsUrl.trim());
+			const matches = matchCanvasEvents(events, this.plugin.noteIndex.getNotes(), courses);
 
 			const matched = matches.filter((m) => m.matchedNote);
 			const unmatched = matches.filter((m) => !m.matchedNote);
@@ -35,7 +28,12 @@ export class CanvasSyncModal extends Modal {
 				const applied = await applyCanvasDueDate(this.app, match);
 				if (applied) updatedCount++;
 			}
-			if (updatedCount > 0) this.params.onSynced();
+
+			// Rebuild synchronously (not the debounced requestRefresh) so the
+			// dashboard-file update below reads the due dates just applied,
+			// not a stale pre-sync snapshot.
+			if (updatedCount > 0) this.plugin.noteIndex.rebuildNow();
+			await this.plugin.updateDashboardFileIfConfigured(unmatched);
 
 			const skipped = events.length - matches.length;
 			statusEl.setText(
@@ -55,6 +53,12 @@ export class CanvasSyncModal extends Modal {
 		if (unmatched.length === 0) {
 			container.createEl("p", { text: "Every Canvas item matched an existing note.", cls: "course-command-center-empty" });
 			return;
+		}
+		if (this.plugin.settings.dashboardFilePath.trim()) {
+			container.createEl("p", {
+				text: "These are already listed in your dashboard file — create a note here only if you want a full note for one.",
+				cls: "course-command-center-empty",
+			});
 		}
 
 		const list = container.createDiv({ cls: "course-command-center-canvas-unmatched-list" });
@@ -86,11 +90,12 @@ export class CanvasSyncModal extends Modal {
 							this.app,
 							match,
 							folder,
-							this.params.templatesFolder,
-							this.params.templaterInstalled,
+							this.plugin.settings.templatesFolder,
+							this.plugin.getOptionalPluginStatus().templater,
 							isInPersonLike(match.matchedCourse)
 						);
-						this.params.onSynced();
+						this.plugin.noteIndex.rebuildNow();
+						void this.plugin.updateDashboardFileIfConfigured();
 						button.setButtonText("Created").setDisabled(true);
 						new Notice(`Created "${match.event.title}"`);
 					} catch (error) {
