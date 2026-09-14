@@ -17,9 +17,10 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	staleLectureWindowDays: 10,
 	canvasIcsUrl: "",
 	dashboardFilePath: "",
-	doNextWindowDays: 2,
+	doNextWindowDays: 3,
 	lastCanvasEvents: [],
 	lastCanvasSyncedAt: null,
+	completedCanvasEventUids: [],
 };
 
 /** Stamped near the top of every generated dashboard file so a future write

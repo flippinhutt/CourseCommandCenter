@@ -123,10 +123,37 @@ export default class CourseCommandCenterPlugin extends Plugin {
 	 * syncCanvasCalendar. This is what makes Refresh (and everything else)
 	 * durable: a note created or deleted since the last sync is reflected
 	 * immediately, and nothing needs a network call to redraw correctly.
-	 * Returns [] if there's never been a successful sync. */
+	 * Returns [] if there's never been a successful sync. Events the user has
+	 * dismissed via markCanvasEventComplete are filtered out here — the one
+	 * place both the view and the dashboard file read Canvas data from — so
+	 * a dismissed event stays hidden everywhere, across re-syncs, until
+	 * cleared in Settings. */
 	getCurrentCanvasMatches(): CanvasSyncMatch[] {
 		if (this.settings.lastCanvasEvents.length === 0) return [];
-		return matchCanvasEvents(this.settings.lastCanvasEvents, this.noteIndex.getNotes(), activeCourses(this.settings.courses));
+		const matches = matchCanvasEvents(this.settings.lastCanvasEvents, this.noteIndex.getNotes(), activeCourses(this.settings.courses));
+		if (this.settings.completedCanvasEventUids.length === 0) return matches;
+		const dismissed = new Set(this.settings.completedCanvasEventUids);
+		return matches.filter((m) => !dismissed.has(m.event.uid));
+	}
+
+	/** Marks an unmatched Canvas event "done" without creating a note for it
+	 * — the todo-list-style completion for an event that has nothing to set
+	 * `status:` on. Idempotent. */
+	async markCanvasEventComplete(uid: string): Promise<void> {
+		if (!this.settings.completedCanvasEventUids.includes(uid)) {
+			this.settings.completedCanvasEventUids.push(uid);
+			await this.saveSettings();
+		}
+		void this.updateDashboardFileIfConfigured();
+	}
+
+	/** Settings-page safety valve: undoes every markCanvasEventComplete call,
+	 * so a misclick isn't permanent. Dismissed events reappear once their
+	 * course is re-matched (immediately — no re-sync needed). */
+	async clearCompletedCanvasEvents(): Promise<void> {
+		this.settings.completedCanvasEventUids = [];
+		await this.saveSettings();
+		void this.updateDashboardFileIfConfigured();
 	}
 
 	/** Regenerates the dashboard file, if one is configured, and refreshes
@@ -161,15 +188,15 @@ export default class CourseCommandCenterPlugin extends Plugin {
 	}
 
 	/** Fires when the dashboard file changes and it wasn't the plugin's own
-	 * write. The only edit that matters is checking a box — a note's
-	 * wikilink line, checked, means "mark this note complete." Marking it
-	 * complete makes fromNote (dashboard-content.ts) exclude it, so it drops
-	 * off the list on the regeneration this triggers — that's the whole
-	 * "disappears when completed" behavior; there's no separate removal
-	 * step. Canvas-only lines never render as checkboxes (nothing to mark
-	 * complete before a note exists for them), so nothing here creates a
-	 * note — only handlePossibleCanvasNoteCreation's wikilink-click path
-	 * does that. */
+	 * write. The only edit that matters is checking a box. A note's wikilink
+	 * line, checked, means "mark this note complete" — that makes fromNote
+	 * (dashboard-content.ts) exclude it, so it drops off the list on the
+	 * regeneration this triggers. A Canvas-only line, checked, means "I did
+	 * this without ever creating a note for it" — resolved against
+	 * pendingCanvasNotes (the same path->match map a wikilink click would
+	 * use) to get the event's uid, then dismissed via
+	 * markCanvasEventComplete so it's excluded from every future
+	 * getCurrentCanvasMatches() call instead of just this one regeneration. */
 	private async handleDashboardFileEdited(file: TFile): Promise<void> {
 		try {
 			const content = await this.app.vault.cachedRead(file);
@@ -182,14 +209,22 @@ export default class CourseCommandCenterPlugin extends Plugin {
 				if (!linkMatch) continue;
 				const notePath = normalizePath(`${linkMatch[1]}.md`);
 				const noteFile = this.app.vault.getAbstractFileByPath(notePath);
-				if (!(noteFile instanceof TFile)) continue;
-				await this.app.fileManager.processFrontMatter(noteFile, (fm) => {
-					fm.status = "complete";
-				});
-				markedAny = true;
+				if (noteFile instanceof TFile) {
+					await this.app.fileManager.processFrontMatter(noteFile, (fm) => {
+						fm.status = "complete";
+					});
+					markedAny = true;
+					continue;
+				}
+				const pendingMatch = this.pendingCanvasNotes.get(notePath);
+				if (pendingMatch && !this.settings.completedCanvasEventUids.includes(pendingMatch.event.uid)) {
+					this.settings.completedCanvasEventUids.push(pendingMatch.event.uid);
+					markedAny = true;
+				}
 			}
 
 			if (markedAny) {
+				await this.saveSettings();
 				this.noteIndex.rebuildNow();
 				void this.updateDashboardFileIfConfigured();
 			}

@@ -1,11 +1,23 @@
 import { App, Modal, Setting, TFile } from "obsidian";
-import type { IndexedNote } from "../types";
+import type { IndexedNote, NoteStatus } from "../types";
 import { extractChecklistItems, extractWikilinks } from "../utils/markdown";
 import { readRubricTable, summarizeRubric } from "../services/rubric-service";
 import { formatHumanDate, parseLocalDate } from "../utils/dates";
 
+const STATUS_OPTIONS: NoteStatus[] = ["not-started", "in-progress", "blocked", "reviewing", "submitted", "complete"];
+
+function statusLabel(status: NoteStatus): string {
+	return status
+		.split("-")
+		.map((word) => word[0].toUpperCase() + word.slice(1))
+		.join(" ");
+}
+
 export class AssignmentDetailModal extends Modal {
-	constructor(app: App, private note: IndexedNote) {
+	/** `onStatusChange` fires only after the user explicitly picks a new
+	 * status from the dropdown below — never as a side effect of opening
+	 * this modal, per the plugin's frontmatter-write rule. */
+	constructor(app: App, private note: IndexedNote, private onStatusChange?: () => void) {
 		super(app);
 	}
 
@@ -25,7 +37,7 @@ export class AssignmentDetailModal extends Modal {
 		const summary = contentEl.createDiv({ cls: "course-command-center-detail-summary" });
 		this.addField(summary, "Course", this.note.props.course);
 		this.addField(summary, "Due", this.formatDue());
-		this.addField(summary, "Status", this.note.props.status);
+		this.addStatusDropdown(contentEl, file);
 		this.addField(summary, "Priority", this.note.props.priority);
 		this.addField(summary, "Module", this.note.props.module);
 		if (this.note.props.points_possible != null || this.note.props.points_earned != null) {
@@ -89,6 +101,21 @@ export class AssignmentDetailModal extends Modal {
 	private formatDue(): string | undefined {
 		const date = parseLocalDate(this.note.props.due);
 		return date ? formatHumanDate(date) : this.note.props.due;
+	}
+
+	private addStatusDropdown(container: HTMLElement, file: TFile): void {
+		new Setting(container)
+			.setName("Status")
+			.addDropdown((dropdown) => {
+				for (const status of STATUS_OPTIONS) dropdown.addOption(status, statusLabel(status));
+				dropdown.setValue(this.note.props.status ?? "not-started").onChange(async (value) => {
+					await this.app.fileManager.processFrontMatter(file, (fm) => {
+						fm.status = value as NoteStatus;
+					});
+					this.note.props.status = value as NoteStatus;
+					this.onStatusChange?.();
+				});
+			});
 	}
 
 	private addField(container: HTMLElement, label: string, value: string | undefined): void {

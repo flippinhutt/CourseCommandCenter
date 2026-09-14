@@ -93,11 +93,11 @@ export interface PluginSettings {
 	 * runs "Sync Canvas calendar," never automatically or in the background. */
 	canvasIcsUrl: string;
 	/** Vault-relative path of an auto-generated summary note (Deadlines /
-	 * Current work / Do next sections). Empty string disables the feature —
+	 * Upcoming / Do next sections). Empty string disables the feature —
 	 * nothing is ever written unless this is set. */
 	dashboardFilePath: string;
 	/** "Do next" window, in days, for the dashboard file's most-urgent
-	 * section. "Current work" reuses upcomingDeadlineWindowDays. */
+	 * section. "Upcoming" reuses upcomingDeadlineWindowDays. */
 	doNextWindowDays: number;
 	/** Raw events from the most recent successful Canvas sync. Internal
 	 * cache, not a user-facing setting (no Settings UI field) — persisted
@@ -109,6 +109,13 @@ export interface PluginSettings {
 	lastCanvasEvents: IcsEvent[];
 	/** ISO timestamp of the last successful sync, or null if never synced. */
 	lastCanvasSyncedAt: string | null;
+	/** UIDs of unmatched Canvas events the user has checked off directly —
+	 * "done" for an event with no note yet, since there's no frontmatter
+	 * `status` to mark complete. Internal cache, not a user-facing setting
+	 * (no Settings UI field beyond a clear-all reset button); filters
+	 * getCurrentCanvasMatches() everywhere, so a dismissed event stays
+	 * hidden across re-syncs (same uid) until cleared. */
+	completedCanvasEventUids: string[];
 }
 
 /** Parsed frontmatter properties the plugin cares about; all optional. */

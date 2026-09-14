@@ -91,6 +91,12 @@
 	color: var(--text-muted);
 }
 
+.course-command-center-complete-checkbox {
+	margin-right: 6px;
+	vertical-align: middle;
+	cursor: pointer;
+}
+
 .course-command-center-task-done {
 	text-decoration: line-through;
 	color: var(--text-muted);

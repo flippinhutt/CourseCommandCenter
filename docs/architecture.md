@@ -40,6 +40,13 @@ main.ts                          Plugin entry point: registers the view,
                                   CanvasSyncMatch[] through — Refresh had
                                   none to pass, so every Refresh silently
                                   wiped whatever the last sync had written.
+                                  It also filters out any event whose uid is
+                                  in settings.completedCanvasEventUids — the
+                                  todo-list-style "checked off, no note"
+                                  completion for an unmatched Canvas event,
+                                  written by markCanvasEventComplete() and
+                                  undone by clearCompletedCanvasEvents()
+                                  (the Settings-page safety valve).
 
                                   Also owns pendingCanvasNotes (an in-memory
                                   path -> CanvasSyncMatch map, rebuilt from
@@ -58,15 +65,27 @@ main.ts                          Plugin entry point: registers the view,
                                   newly-checked box whose text contains a
                                   wikilink — isWritingDashboardFile guards
                                   it from reacting to the plugin's own
-                                  regeneration writes. A match sets that
-                                  note's status to complete via
-                                  processFrontMatter, then triggers a
-                                  regeneration; dashboard-content.ts's
-                                  fromNote already excludes non-active
-                                  statuses, so the item disappearing on the
-                                  next render *is* the "complete" effect —
-                                  there's no separate "delete this line"
-                                  step anywhere.
+                                  regeneration writes. If the wikilink
+                                  resolves to a real file, that note's status
+                                  is set to complete via processFrontMatter;
+                                  if it doesn't (a not-yet-created Canvas
+                                  item), the same path -> CanvasSyncMatch
+                                  lookup used for note-creation
+                                  (pendingCanvasNotes) instead resolves the
+                                  event's uid, which gets pushed onto
+                                  completedCanvasEventUids. Either way a
+                                  regeneration follows; dashboard-content.ts's
+                                  fromNote/fromUnmatchedCanvasEvent already
+                                  exclude non-active statuses / dismissed
+                                  uids, so the item disappearing on the next
+                                  render *is* the "complete" effect — there's
+                                  no separate "delete this line" step
+                                  anywhere. The live view's per-row
+                                  checkboxes (markNoteComplete /
+                                  markCanvasEventComplete on
+                                  CourseCommandCenterView) reach the same two
+                                  outcomes directly, without going through
+                                  the dashboard file at all.
 src/
   settings.ts                    Settings tab UI only. Reads/writes
                                   PluginSettings via the plugin instance;
@@ -81,35 +100,57 @@ src/
   views/
     course-command-center-view.ts
                                   The dashboard ItemView. Pulls data from
-                                  NoteIndexService and renders it; contains
-                                  no frontmatter-writing or file-creation
-                                  logic itself — it delegates to modals and
-                                  services for anything that mutates state
-                                  (an unmatched Canvas item's click handler
-                                  calls createNoteForCanvasEvent directly,
-                                  same as the sync modal's button). "Do
-                                  next" and "Upcoming deadlines" render a
-                                  DisplayItem union (a vault note or an
-                                  unmatched CanvasSyncMatch from
-                                  plugin.getCurrentCanvasMatches()) so both
-                                  sources sort into one chronological list;
-                                  "Current work"/"Recently created"/
-                                  "Feedback to process" only ever contain
-                                  note items, since Canvas-only entries have
-                                  no type/status until a note exists. Both
-                                  due-date sections filter out isPastDue
-                                  items — forward planning only; overdue
-                                  work surfaces through the health check's
-                                  "Action needed" severity instead, a
-                                  deliberately separate concern.
+                                  NoteIndexService and renders it; delegates
+                                  note *creation* to modals and services (an
+                                  unmatched Canvas item's click handler calls
+                                  createNoteForCanvasEvent directly, same as
+                                  the sync modal's button) rather than
+                                  duplicating that logic. It does write
+                                  frontmatter directly for one thing: each
+                                  row's completion checkbox
+                                  (markNoteComplete calls processFrontMatter
+                                  inline; markCanvasEventComplete delegates
+                                  to the plugin's method of the same name) —
+                                  kept inline rather than routed through a
+                                  service since it's a single-field,
+                                  single-purpose write with no template/
+                                  resolution logic to share with anything
+                                  else.
+
+                                  Six sections render a DisplayItem union (a
+                                  vault note or an unmatched CanvasSyncMatch
+                                  from plugin.getCurrentCanvasMatches()) so
+                                  both sources sort into one chronological
+                                  list and share one checkbox-rendering path:
+                                  Due today, Do next, Upcoming deadlines, and
+                                  Past due (all date-driven, each with its
+                                  own build*() filter — see dueState/
+                                  isPastDue usage in each). "Current
+                                  work"/"Recently created"/"Feedback to
+                                  process" only ever contain note items,
+                                  since Canvas-only entries have no
+                                  type/status until a note exists. Do
+                                  next/Upcoming/Due today filter out
+                                  isPastDue items on purpose — forward
+                                  planning only; Past due is where overdue
+                                  items go instead, kept disjoint from the
+                                  three above it so they stay purely
+                                  forward-looking.
 
   modals/
     create-note-modal.ts         Collects a title (+ optional due date),
                                   then calls template-service to create the
                                   note. Owns the "don't overwrite, prompt for
                                   a different name" behavior.
-    assignment-detail-modal.ts   Read-only detail view: due/status/points,
-                                  linked notes, checklist tasks, rubric.
+    assignment-detail-modal.ts   Mostly a read-only detail view — due/
+                                  status/points, linked notes, checklist
+                                  tasks, rubric — with one write path: a
+                                  status dropdown that calls
+                                  processFrontMatter directly and then an
+                                  optional onStatusChange callback (the view
+                                  passes one that rebuilds the note index and
+                                  dashboard file), so a status edit here
+                                  reaches every other section immediately.
     health-check-modal.ts        Read-only results list from
                                   health-check-service.
     dashboard-insert-modal.ts    Presents the Plain/Tasks/Dataview choice
@@ -193,19 +234,30 @@ src/
                                   template-service. Re-exports
                                   matchCanvasEvents from canvas-match.ts so
                                   callers only need one import.
-    dashboard-content.ts          Pure: builds the sorted Deadlines pool
-                                  (buildDashboardLines) from IndexedNote[] +
-                                  unmatched CanvasSyncMatch[] — excluding
-                                  anything isPastDue (before today; today
-                                  itself stays) — and renders it to Markdown
-                                  (buildDashboardMarkdown) with overlapping
-                                  Deadlines/Current work/Do next sections.
-                                  Each DashboardLine carries isExistingNote:
-                                  a real note's line renders as a `- [ ]`
-                                  checkbox, a not-yet-created Canvas line as
-                                  a plain link, since only the former has
-                                  something to mark complete. No Obsidian
-                                  API — same reasoning as canvas-match.ts.
+    dashboard-content.ts          Pure: collectLines() is the one shared pool
+                                  (IndexedNote[] + unmatched
+                                  CanvasSyncMatch[] -> DashboardLine[], no
+                                  past/future filtering) behind both
+                                  buildDashboardLines (excludes isPastDue —
+                                  "today or later") and buildPastDueLines
+                                  (keeps only isPastDue, oldest first) — the
+                                  two pools buildDashboardMarkdown renders as
+                                  Markdown: overlapping Deadlines/Upcoming/Do
+                                  next/Due today sections from the first pool
+                                  (Due today = isWithinDays(due, 0), which —
+                                  since that pool already excludes past-due —
+                                  means exactly today), plus a Past due
+                                  section from the second at the very bottom,
+                                  deliberately disjoint from the other four.
+                                  Every line renders as a `- [ ]` checkbox;
+                                  each DashboardLine still carries
+                                  isExistingNote since checking a real note's
+                                  line and a not-yet-created Canvas item's
+                                  line do different things on the main.ts
+                                  side (see handleDashboardFileEdited:
+                                  processFrontMatter vs.
+                                  markCanvasEventComplete). No Obsidian API —
+                                  same reasoning as canvas-match.ts.
     dashboard-file-service.ts    Obsidian-API side: writes dashboard-
                                   content.ts's output to the configured
                                   path via vault.create/modify. Refuses to

@@ -9,6 +9,15 @@
 		"lint": "eslint src main.ts --ext .ts",
 		"test": "vitest run"
 	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/flippinhutt/CourseCommandCenter.git"
+	},
+	"bugs": {
+		"url": "https://github.com/flippinhutt/CourseCommandCenter/issues"
+	},
+	"homepage": "https://github.com/flippinhutt/CourseCommandCenter#readme",
+	"author": "Ryan Hutto",
 	"license": "MIT",
 	"devDependencies": {
 		"@types/node": "^20.11.0",

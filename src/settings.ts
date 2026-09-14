@@ -56,7 +56,9 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Upcoming deadline window (days)")
-			.setDesc("How many days ahead counts as an upcoming deadline.")
+			.setDesc(
+				"How many days ahead counts as an upcoming deadline. Also drives the dashboard file's \"Upcoming\" section."
+			)
 			.addText((text) =>
 				text.setValue(String(this.plugin.settings.upcomingDeadlineWindowDays)).onChange(async (value) => {
 					const num = Number(value);
@@ -129,7 +131,7 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 		containerEl.createEl("h3", { text: "Dashboard file (optional)" });
 		containerEl.createEl("p", {
 			text:
-				"Leave the path empty to disable. When set, this note is fully regenerated (Deadlines / Current work / " +
+				"Leave the path empty to disable. When set, this note is fully regenerated (Deadlines / Upcoming / " +
 				"Do next sections) every time you click Refresh in the view, and after a Canvas sync — never automatically " +
 				"in the background. Manual edits to it are overwritten on the next update.",
 			cls: "setting-item-description",
@@ -175,6 +177,23 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.canvasIcsUrl = value.trim();
 						await this.plugin.saveSettings();
+					})
+			);
+
+		const dismissedCount = this.plugin.settings.completedCanvasEventUids.length;
+		new Setting(containerEl)
+			.setName("Checked-off Canvas items")
+			.setDesc(
+				`${dismissedCount} unmatched Canvas item${dismissedCount === 1 ? "" : "s"} currently checked off without a note. ` +
+					"Clearing brings them all back into Do next / Due today / Upcoming."
+			)
+			.addButton((button) =>
+				button
+					.setButtonText("Clear checked-off items")
+					.setDisabled(dismissedCount === 0)
+					.onClick(async () => {
+						await this.plugin.clearCompletedCanvasEvents();
+						this.display();
 					})
 			);
 

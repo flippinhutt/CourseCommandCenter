@@ -14,6 +14,13 @@ const ALL_COURSES = "__all__";
 
 const CURRENT_WORK_TYPES: string[] = ["assignment", "project-deliverable", "module", "sql-lab", "discussion", "lecture"];
 const ACTIVE_STATUSES = new Set(["not-started", "in-progress", "blocked", "reviewing"]);
+/** Narrower than ACTIVE_STATUSES on purpose: a freshly created note defaults
+ * to "not-started", so that alone shouldn't count as "current work" until
+ * you've actually started it. "in-progress" does belong here — it also
+ * shows in "Do next" when due soon, and that overlap is intentional, same
+ * as every other pair of sections in this view. */
+const CURRENT_WORK_STATUSES = new Set(["in-progress", "blocked", "reviewing"]);
+const DONE_STATUSES = new Set(["complete", "submitted"]);
 
 /** A row shown in a due-date-driven section: either a real vault note, or a
  * Canvas event with no note yet. "Current work"/"Recently created"/
@@ -96,11 +103,13 @@ export class CourseCommandCenterView extends ItemView {
 		this.renderHeader(container);
 		this.renderSummary(container);
 		this.renderQuickActions(container);
+		this.renderSection(container, "due-today", "Due today", this.buildDueToday());
 		this.renderSection(container, "do-next", "Do next", this.buildDoNext());
 		this.renderSection(container, "current-work", "Current work", this.buildCurrentWork());
 		this.renderSection(container, "upcoming", "Upcoming deadlines", this.buildUpcoming());
 		this.renderSection(container, "recent", "Recently created", this.buildRecent());
 		this.renderSection(container, "feedback", "Feedback to process", this.buildFeedback());
+		this.renderSection(container, "past-due", "Past due", this.buildPastDue());
 		this.renderArtifactsSection(container);
 	}
 
@@ -227,6 +236,31 @@ export class CourseCommandCenterView extends ItemView {
 		const list = body.createEl("ul");
 		for (const item of items) {
 			const li = list.createEl("li");
+			if (item.kind === "note") {
+				const checkbox = li.createEl("input", {
+					type: "checkbox",
+					cls: `${CSS_PREFIX}-complete-checkbox`,
+					attr: { "aria-label": `Mark "${item.note.basename}" complete`, title: "Mark complete" },
+				});
+				checkbox.addEventListener("click", (evt) => {
+					evt.stopPropagation();
+					void this.markNoteComplete(item.note);
+				});
+			} else {
+				const uid = item.match.event.uid;
+				const checkbox = li.createEl("input", {
+					type: "checkbox",
+					cls: `${CSS_PREFIX}-complete-checkbox`,
+					attr: {
+						"aria-label": `Check off "${item.match.event.title}" (no note)`,
+						title: "Check off — no note will be created",
+					},
+				});
+				checkbox.addEventListener("click", (evt) => {
+					evt.stopPropagation();
+					void this.markCanvasEventComplete(uid);
+				});
+			}
 			const link = li.createEl("a", { text: this.describeItem(item), cls: "internal-link" });
 			this.bindItemClick(link, item);
 			if (item.kind === "canvas" && item.match.event.url) {
@@ -278,11 +312,43 @@ export class CourseCommandCenterView extends ItemView {
 		}
 	}
 
+	/** Marks a note complete directly from the view — the in-app counterpart
+	 * to checking a box in the dashboard file. rebuildNow() re-renders this
+	 * view via the noteIndex.onChange subscription in onOpen, so the item
+	 * drops out of whatever due-date/status-filtered section it was in
+	 * without any extra render call here. */
+	private async markNoteComplete(note: IndexedNote): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(note.path);
+		if (!(file instanceof TFile)) return;
+		try {
+			await this.app.fileManager.processFrontMatter(file, (fm) => {
+				fm.status = "complete";
+			});
+			this.plugin.noteIndex.rebuildNow();
+			void this.plugin.updateDashboardFileIfConfigured();
+		} catch (error) {
+			console.error("Course Command Center: failed to mark note complete from the view", error);
+		}
+	}
+
+	/** Checks off an unmatched Canvas event that has no note — the todo-list
+	 * completion for something you did without ever creating a note for it.
+	 * Settings changes don't go through noteIndex.onChange, so this calls
+	 * render() itself (unlike markNoteComplete, which relies on rebuildNow's
+	 * listener). */
+	private async markCanvasEventComplete(uid: string): Promise<void> {
+		await this.plugin.markCanvasEventComplete(uid);
+		this.render();
+	}
+
 	private bindNoteClick(link: HTMLElement, note: IndexedNote): void {
 		link.addEventListener("click", (evt) => {
 			evt.preventDefault();
 			if (evt.shiftKey && (note.props.type === "assignment" || note.props.type === "project-deliverable")) {
-				new AssignmentDetailModal(this.app, note).open();
+				new AssignmentDetailModal(this.app, note, () => {
+					this.plugin.noteIndex.rebuildNow();
+					void this.plugin.updateDashboardFileIfConfigured();
+				}).open();
 				return;
 			}
 			const file = this.app.vault.getAbstractFileByPath(note.path);
@@ -297,19 +363,43 @@ export class CourseCommandCenterView extends ItemView {
 		return `${note.basename}${due}${status}`;
 	}
 
+	/** Items due exactly today — its own section, and also folded into "Do
+	 * next" below so that list stays a complete near-term picture rather
+	 * than excluding today's items just because they have their own home
+	 * now. dueState's window argument only affects the "upcoming" boundary,
+	 * not "today", so 0 here is just "don't bother with a window". */
+	private buildDueToday(): DisplayItem[] {
+		const noteItems: DisplayItem[] = this.notesForSelection()
+			.filter((n) => !DONE_STATUSES.has(n.props.status ?? ""))
+			.map(noteItem);
+		const canvasItems: DisplayItem[] = this.canvasItemsForSelection().map((match) => ({ kind: "canvas" as const, match }));
+		return [...noteItems, ...canvasItems]
+			.filter((i) => dueState(itemDue(i), 0) === "today")
+			.sort((a, b) => compareDueDates(itemDue(a), itemDue(b)));
+	}
+
 	private buildDoNext(): DisplayItem[] {
-		const windowDays = this.plugin.settings.upcomingDeadlineWindowDays;
-		const noteItems = this.notesForSelection().map(noteItem);
+		const windowDays = this.plugin.settings.doNextWindowDays;
+		const noteItems = this.notesForSelection()
+			.filter((n) => !DONE_STATUSES.has(n.props.status ?? ""))
+			.map(noteItem);
 		const canvasItems: DisplayItem[] = this.canvasItemsForSelection().map((match) => ({ kind: "canvas", match }));
 		// Past due is excluded, not just deprioritized — this is a forward
 		// planning list. A note due today still counts (isPastDue is
-		// strictly-before-today), and genuinely overdue work is what the
-		// health check's "action needed" severity is for instead.
+		// strictly-before-today); genuinely overdue work has its own "Past
+		// due" section below, kept separate so this list stays about what's
+		// still coming up.
 		const dated = [...noteItems, ...canvasItems].filter((i) => !isPastDue(itemDue(i)));
 
-		const dueToday = dated.filter((i) => dueState(itemDue(i), windowDays) === "today");
+		const dueToday = this.buildDueToday();
 		const dueSoon = dated.filter((i) => dueState(itemDue(i), windowDays) === "upcoming");
-		const noDueInProgress = noteItems.filter((i) => !i.note.props.due && i.note.props.status === "in-progress");
+		// Same type restriction as "Current work" on purpose: without it, any
+		// note anywhere in the vault with status "in-progress" and no due date
+		// — a reference/background note included — would sit in "Do next"
+		// forever, since there's no due date to ever age it out.
+		const noDueInProgress = noteItems.filter(
+			(i) => !i.note.props.due && i.note.props.status === "in-progress" && i.note.props.type && CURRENT_WORK_TYPES.includes(i.note.props.type)
+		);
 
 		const seen = new Set<string>();
 		const ordered: DisplayItem[] = [];
@@ -324,20 +414,36 @@ export class CourseCommandCenterView extends ItemView {
 		return ordered;
 	}
 
+	/** Overdue notes and Canvas events, oldest (most overdue) first. Kept out
+	 * of every forward-planning section above; this is where they can still
+	 * be checked off instead of just sitting there unresolved. */
+	private buildPastDue(): DisplayItem[] {
+		const noteItems: DisplayItem[] = this.notesForSelection()
+			.filter((n) => isPastDue(n.props.due) && !DONE_STATUSES.has(n.props.status ?? ""))
+			.map(noteItem);
+		const canvasItems: DisplayItem[] = this.canvasItemsForSelection()
+			.filter((m) => isPastDue(m.event.due ?? undefined))
+			.map((match) => ({ kind: "canvas" as const, match }));
+		return [...noteItems, ...canvasItems].sort((a, b) => compareDueDates(itemDue(a), itemDue(b)));
+	}
+
 	private buildCurrentWork(): DisplayItem[] {
 		return this.notesForSelection()
-			.filter((n) => n.props.type && CURRENT_WORK_TYPES.includes(n.props.type) && ACTIVE_STATUSES.has(n.props.status ?? ""))
+			.filter((n) => n.props.type && CURRENT_WORK_TYPES.includes(n.props.type) && CURRENT_WORK_STATUSES.has(n.props.status ?? ""))
 			.map(noteItem);
 	}
 
 	private buildUpcoming(): DisplayItem[] {
+		const windowDays = this.plugin.settings.upcomingDeadlineWindowDays;
 		const noteItems: DisplayItem[] = this.notesForSelection()
-			.filter((n) => Boolean(parseLocalDate(n.props.due)) && !isPastDue(n.props.due))
+			.filter((n) => Boolean(parseLocalDate(n.props.due)) && !isPastDue(n.props.due) && !DONE_STATUSES.has(n.props.status ?? ""))
 			.map(noteItem);
 		const canvasItems: DisplayItem[] = this.canvasItemsForSelection()
 			.filter((m) => !isPastDue(m.event.due ?? undefined))
 			.map((match) => ({ kind: "canvas" as const, match }));
-		return [...noteItems, ...canvasItems].sort((a, b) => compareDueDates(itemDue(a), itemDue(b)));
+		return [...noteItems, ...canvasItems]
+			.filter((i) => dueState(itemDue(i), windowDays) !== "later")
+			.sort((a, b) => compareDueDates(itemDue(a), itemDue(b)));
 	}
 
 	private buildRecent(): DisplayItem[] {

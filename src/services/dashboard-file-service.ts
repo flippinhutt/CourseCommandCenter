@@ -1,6 +1,6 @@
 import { type App, normalizePath, TFile } from "obsidian";
 import type { CanvasSyncMatch, CourseConfig, IndexedNote, PluginSettings } from "../types";
-import { buildDashboardLines, buildDashboardMarkdown } from "./dashboard-content";
+import { buildDashboardLines, buildDashboardMarkdown, buildPastDueLines } from "./dashboard-content";
 import { DASHBOARD_FILE_MARKER } from "../constants";
 import { formatIsoDate } from "../utils/dates";
 
@@ -27,7 +27,14 @@ export async function updateDashboardFile(
 	if (!path) return;
 
 	const lines = buildDashboardLines(notes, courses, canvasMatches);
-	const content = buildDashboardMarkdown(lines, settings.doNextWindowDays, settings.upcomingDeadlineWindowDays, formatIsoDate(new Date()));
+	const pastDueLines = buildPastDueLines(notes, courses, canvasMatches);
+	const content = buildDashboardMarkdown(
+		lines,
+		settings.doNextWindowDays,
+		settings.upcomingDeadlineWindowDays,
+		formatIsoDate(new Date()),
+		pastDueLines
+	);
 
 	const existing = app.vault.getAbstractFileByPath(path);
 	if (existing instanceof TFile) {

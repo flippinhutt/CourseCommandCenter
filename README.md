@@ -15,18 +15,38 @@ folder-and-Markdown workflow.
 ## What it does
 
 - A **Course Command Center** view (ribbon icon or command palette) showing,
-  per course or across all courses: overdue/due-soon counts, a "Do next"
-  list, current work, upcoming deadlines, recently created notes, feedback
-  awaiting processing, and course artifact links. "Do next" and "Upcoming
-  deadlines" include unmatched Canvas events too, not just vault notes —
-  click one to create its note on the spot.
+  per course or across all courses: overdue/due-soon counts, a "Due today"
+  list, a "Do next" list, current work, upcoming deadlines, recently created
+  notes, feedback awaiting processing, a "Past due" list at the very bottom,
+  and course artifact links. "Due today", "Do next", "Upcoming deadlines",
+  and "Past due" include unmatched Canvas events too, not just vault notes —
+  click one to create its note on the spot. Every row has a checkbox,
+  note-backed or not — including overdue ones, so something you missed can
+  still be checked off instead of sitting there unresolved forever:
+  - A **note's** checkbox sets its `status:` frontmatter to `complete`
+    right from the view — the item then drops out of every due-date/status
+    section immediately, no need to open the note or the dashboard file.
+  - An **unmatched Canvas event's** checkbox (nothing to create a note
+    for yet) checks it off your list without creating one — it's
+    remembered by the event's Canvas UID and stays hidden across future
+    Refreshes and re-syncs. Settings → "Checked-off Canvas items" shows how
+    many and can clear them all if you check one off by mistake.
+  - **"Current work"** is a different axis from the date-driven sections
+    above: it shows notes whose `status:` is `in-progress`, `blocked`, or
+    `reviewing`, regardless of due date (so a project you're chipping away
+    at stays visible even when its due date is months out). A brand-new
+    note defaults to `not-started` and won't appear here until you actually
+    start it — via the status dropdown described next, or by editing
+    frontmatter yourself.
 - **Quick actions, derived automatically from your settings** — for every
   artifact type you map to a folder in a course (Settings → Courses), you
   automatically get a "Create <type>" button and command. There's no
   separate list to keep in sync — the folder map *is* the configuration.
-- An **assignment detail panel** showing due date/status/points, linked
-  notes, checklist tasks, and a parsed **rubric checklist** with a
-  non-destructive completeness summary.
+- An **assignment detail panel** (shift-click a note in the view) showing
+  due date/points, linked notes, checklist tasks, and a parsed **rubric
+  checklist** with a non-destructive completeness summary — plus an
+  editable **status dropdown** that writes `status:` frontmatter directly
+  and refreshes the dashboard immediately.
 - A **course health check** that flags overdue work, stale in-progress
   assignments, incomplete rubrics, modules/discussions missing expected
   tasks, SQL labs with no code block, database-design packets missing
@@ -155,41 +175,45 @@ An auto-generated note that gives you "what's due" as a plain file instead
 of only the live view — set **Settings → Dashboard file path** (empty by
 default = disabled) and it starts getting written.
 
-The file has three sections, in this order:
+The file has five sections, in this order:
 
 - **Deadlines** — every active (not complete/submitted) note with a due
   date of today or later, across all your courses, sorted chronologically.
   The master list.
-- **Current work** — the subset due within the "Upcoming deadline window"
+- **Upcoming** — the subset due within the "Upcoming deadline window"
   setting (default 7 days).
 - **Do next** — the subset due within the "Do next window" setting (default
-  2 days).
+  3 days).
+- **Due today** — the subset due exactly today. The narrowest
+  forward-looking section.
+- **Past due** — at the very bottom, oldest (most overdue) first. The one
+  section disjoint from the four above it: everything up there excludes
+  overdue items on purpose (forward planning only), and this is where they
+  go instead so they're not just gone — check one off here the same way you
+  would anywhere else.
 
-**Past due is excluded, not just deprioritized.** A due date before today
-never appears in any section — this is a forward-planning list, not a
-backlog. A due date of exactly today still counts as current. Neglected
-overdue work isn't ignored by the plugin entirely; it's what **Run course
-health check**'s "Action needed" severity is specifically for, kept
-separate from day-to-day planning on purpose.
-
-Sections overlap on purpose: something due tomorrow shows up in all three,
+Sections overlap on purpose (Past due is the exception, see above):
+something due tomorrow shows up in all three of Deadlines/Upcoming/Do next,
 so each section is a complete view at its own zoom level rather than a
 disjoint slice. It pulls from every course's due-dated notes, not just
 Canvas-synced ones — if you've been setting `due:` in frontmatter yourself,
 those show up here too. The **live Course Command Center view** shows the
-same combined picture in its "Do next" and "Upcoming deadlines" sections —
-the file and the view are two renderings of the same underlying data, not
-two separate things to keep in sync with each other.
+same combined picture in its "Due today", "Do next", "Upcoming deadlines",
+and "Past due" sections — the file and the view are two renderings of the
+same underlying data, not two separate things to keep in sync with each
+other.
 
-**Real notes render as checkboxes; check one off and it's gone next
-update.** A line for an existing vault note is a literal `- [ ]` you can
-click in Obsidian. Checking it sets that note's `status:` frontmatter to
-`complete`, which is what actually makes it disappear — the plugin watches
-the dashboard file for a checked box, updates the note, and regenerates the
-file right after, so the item drops out rather than staying checked-but-
-present. A not-yet-created Canvas item is a plain link instead, since
-there's no note yet to mark complete — click it to create one first (see
-below).
+**Every line renders as a checkbox, and checking either kind removes it.**
+Check a real note's line and the plugin sets that note's `status:`
+frontmatter to `complete`. Check a not-yet-created Canvas item's line and
+the plugin remembers its Canvas UID as checked-off instead (there's no note
+to set `status:` on) — either way, the dashboard watches for the checked
+box, applies the change, and regenerates the file right after, so the item
+drops out rather than staying checked-but-present. A checked-off Canvas
+item stays hidden across future Refreshes and re-syncs; Settings →
+"Checked-off Canvas items" can clear all of them if you check one off by
+mistake. Click the Canvas item's link instead of its checkbox if you'd
+rather create a real note for it (see below).
 
 It's fully regenerated (not appended to) every time it updates — clicking
 **Refresh** in the view, and after a **Sync Canvas calendar** run, both
@@ -222,9 +246,9 @@ ways to get the same result as clicking the dashboard-file link.
 
 ## Canvas calendar sync (optional)
 
-Automates keeping "Do next" and "Upcoming deadlines" current by pulling due
-dates from Canvas, without ever calling the Canvas API or storing a login
-token.
+Automates keeping every date-driven section ("Due today", "Do next",
+"Upcoming deadlines", "Past due") current by pulling due dates from Canvas,
+without ever calling the Canvas API or storing a login token.
 
 1. In Canvas, go to **Calendar → Calendar Feed** (usually bottom-left of the
    calendar page) and copy the ICS URL it gives you. This URL is
@@ -297,6 +321,14 @@ Excalidraw, Linter, QuickAdd, Obsidian Git. Status is shown in Settings.
   notes that predate the plugin and use a different frontmatter convention
   won't appear until they're given matching frontmatter (manually, or by
   recreating them through the plugin).
+- A note with `status: in-progress` and no `type:` set (or a `type:` outside
+  `assignment`/`project-deliverable`/`module`/`sql-lab`/`discussion`/
+  `lecture`) never appears in "Current work", and — if it also has no
+  `due:` — sits in "Do next" indefinitely, since there's no due date to age
+  it out. This is by design for reference/background notes, but it means a
+  hub-style note you've marked `in-progress` for tracking purposes (a
+  semester project overview, say) can look like it's stuck in the wrong
+  section if you haven't given it a matching `type:`.
 - Rubric parsing supports the documented table shape
   (`Criterion | Requirement | Evidence in my work | Complete`) under a
   `## Rubric` or `## Rubric checklist` heading; other table shapes aren't
@@ -354,6 +386,19 @@ only network request the plugin ever makes is fetching your Canvas ICS
 calendar feed, and only if you've configured a feed URL and explicitly
 clicked "Sync Canvas calendar" — never automatically or in the background.
 All data otherwise stays in this vault or in this plugin's local settings.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
+
+## Contributing
+
+Issues and pull requests are welcome. Before sending a PR: `npm run build`
+must pass with zero TypeScript errors, and `npm test` must pass — both are
+plain `npm` scripts, no CI setup required to run them locally. Keep changes
+consistent with the design decisions above (local-first, no network calls
+beyond the one documented exception, no destructive file operations, no
+hard dependency on another plugin).
 
 ## License
 
