@@ -1,0 +1,139 @@
+# Architecture
+
+## Why Markdown portability was preserved
+
+Every note the plugin creates is ordinary Markdown with standard Obsidian
+Properties/frontmatter. The plugin never invents a proprietary data format,
+database, or sidecar file: everything it needs to reconstruct its view of
+the vault (course, type, status, due date, rubric table, checklist tasks)
+lives in the note itself. Two consequences follow directly from that
+choice, and both shaped the module boundaries below:
+
+- **Uninstalling the plugin loses nothing.** Notes, links, tasks, and rubric
+  tables remain fully readable and usable as plain Markdown.
+- **The plugin can be read-mostly.** Frontmatter is only ever written
+  through `app.fileManager.processFrontMatter`, and only in response to an
+  explicit user action (create a note, run a quick action). Viewing the
+  dashboard or running a health check never mutates a file.
+
+## Module boundaries
+
+```
+main.ts                          Plugin entry point: registers the view,
+                                  commands, ribbon icon, settings tab, and
+                                  vault/metadata-cache event listeners.
+src/
+  settings.ts                    Settings tab UI only. Reads/writes
+                                  PluginSettings via the plugin instance;
+                                  contains no indexing or note-creation logic.
+  types.ts                       Shared type definitions (no runtime code).
+  constants.ts                   Default settings (ships with an empty
+                                  course list — no course/school is assumed)
+                                  and KNOWN_ARTIFACT_TYPES, the curated
+                                  suggestion list used for richer fallback
+                                  templates and settings-UI autocomplete.
+
+  views/
+    course-command-center-view.ts
+                                  The dashboard ItemView. Pulls data from
+                                  NoteIndexService and renders it; contains
+                                  no frontmatter-writing or file-creation
+                                  logic itself — it delegates to modals and
+                                  services for anything that mutates state.
+
+  modals/
+    create-note-modal.ts         Collects a title (+ optional due date),
+                                  then calls template-service to create the
+                                  note. Owns the "don't overwrite, prompt for
+                                  a different name" behavior.
+    assignment-detail-modal.ts   Read-only detail view: due/status/points,
+                                  linked notes, checklist tasks, rubric.
+    health-check-modal.ts        Read-only results list from
+                                  health-check-service.
+    dashboard-insert-modal.ts    Presents the Plain/Tasks/Dataview choice
+                                  and builds the inserted Markdown block.
+
+  services/
+    course-service.ts            Pure course lookups: course-code matching
+                                  (tolerating trailing descriptive text),
+                                  active-course filtering, the
+                                  hybrid-counts-as-in-person rule, and
+                                  deriveQuickActions, which turns a course's
+                                  folder map into its list of quick actions
+                                  (there is no separate quick-action config —
+                                  mapping a folder to a type is what creates
+                                  the "Create <type>" action for it).
+    note-index-service.ts        Builds an IndexedNote[] from Obsidian's
+                                  metadata cache (never re-reading file
+                                  bodies for indexing) and debounces
+                                  metadata-change-triggered rebuilds so a
+                                  burst of vault events collapses into one
+                                  rebuild.
+    template-service.ts          Resolves a template file if one exists in
+                                  the templates folder for the artifact
+                                  type, else falls back to
+                                  fallback-templates.ts; always regenerates
+                                  frontmatter itself so required fields are
+                                  populated consistently regardless of
+                                  template source; best-effort Templater
+                                  trigger.
+    fallback-templates.ts        Built-in Markdown body templates, one per
+                                  artifact type. Body content only —
+                                  frontmatter is template-service's job.
+    health-check-rules.ts        Pure, individually testable rule functions
+                                  (NoteFacts -> HealthCheckResult | null).
+                                  No Obsidian API usage — this is what the
+                                  unit tests exercise directly.
+    health-check-service.ts      Orchestrator: reads file content only for
+                                  note types a health-check rule actually
+                                  cares about, builds NoteFacts, and calls
+                                  the pure rule functions.
+    rubric-service.ts            Thin file-read wrapper around
+                                  utils/markdown.ts's parseRubricTable.
+    optional-plugin-service.ts   Detects Tasks/Dataview/Templater/
+                                  Excalidraw/Linter/QuickAdd/Git by plugin
+                                  ID; never throws if one is absent.
+
+  utils/
+    dates.ts                     Local-calendar-date parsing/formatting and
+                                  due-state calculation. No timezone/UTC
+                                  shifting.
+    markdown.ts                  Wikilink extraction, checklist parsing,
+                                  fenced-code-block detection, and rubric
+                                  table parsing/summarizing.
+    paths.ts                     Windows-safe filename sanitization and
+                                  vault-relative path joining.
+    frontmatter.ts               Converts raw metadata-cache frontmatter
+                                  into the typed NoteProperties shape,
+                                  tolerating missing/unknown fields.
+    tasks.ts                     Tasks-plugin due-date emoji extraction from
+                                  checklist lines.
+```
+
+## Why the pure-function / service / UI split
+
+- `utils/` and `services/health-check-rules.ts` take no Obsidian `App`
+  dependency and do no I/O — they're the layer the unit tests exercise
+  directly (course-code matching, date/due-state math, filename
+  sanitization, rubric-table parsing, health-check rule evaluation).
+- `services/*` (other than `health-check-rules.ts`) hold the Obsidian-API-
+  dependent orchestration: reading files, walking the metadata cache,
+  detecting other plugins.
+- `views/` and `modals/` hold only rendering and user-interaction wiring.
+  They call into services rather than duplicating indexing, template
+  resolution, or rule logic — so, for example, both the ribbon-accessible
+  view's "Run course health check" button and the command-palette command
+  in `main.ts` call the same `runHealthCheck` function instead of two
+  divergent implementations.
+
+## Performance
+
+`NoteIndexService` builds its index from `app.vault.getMarkdownFiles()` +
+`app.metadataCache.getFileCache()` — frontmatter only, never a body read —
+so indexing all courses stays cheap regardless of vault size. Body reads
+(for checklist tasks, rubric tables, SQL fences, wikilinks) only happen in
+`health-check-service.ts`, `rubric-service.ts`, and
+`assignment-detail-modal.ts`, all of which act on one note at a time when
+the user asks for it, not during indexing. Metadata-cache change events are
+debounced (500ms) before triggering a rebuild, so rapid edits don't cause a
+rescan per keystroke.

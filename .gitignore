@@ -1,0 +1,12 @@
+node_modules/
+main.js
+*.js.map
+.DS_Store
+
+# personal test-vault data (this repo ships fixtures, not a live vault)
+test-vault/
+*.local.md
+
+# editor / OS
+.vscode/
+.idea/

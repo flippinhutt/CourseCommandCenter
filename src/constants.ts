@@ -1,0 +1,62 @@
+import type { ArtifactType, PluginSettings } from "./types";
+
+export const PLUGIN_VIEW_TYPE = "course-command-center-view";
+export const CSS_PREFIX = "course-command-center";
+
+export const DEFAULT_SETTINGS: PluginSettings = {
+	courses: [],
+	templatesFolder: "Templates",
+	dailyNoteFolder: "Daily Notes",
+	weeklyReviewFolder: "Weekly Reviews",
+	inboxPath: "Inbox.md",
+	openAtStartup: false,
+	scanEntireVault: false,
+	recentNotesCount: 10,
+	upcomingDeadlineWindowDays: 7,
+	includeCheckboxTasks: true,
+	staleLectureWindowDays: 10,
+};
+
+/** Artifact types with a hand-written fallback template and, for some, a
+ * dedicated health-check rule. Offered in settings as suggestions (e.g. via
+ * a datalist) — a course's folder map and a note's `type` accept any text,
+ * this list just gets richer built-in behavior. */
+export const KNOWN_ARTIFACT_TYPES: ArtifactType[] = [
+	"course-hub",
+	"module",
+	"announcement",
+	"assignment",
+	"discussion",
+	"lecture",
+	"reading",
+	"study-guide",
+	"feedback",
+	"wireframe",
+	"interface-spec",
+	"critique",
+	"erd",
+	"database-design",
+	"data-dictionary",
+	"normalization",
+	"requirement",
+	"use-case",
+	"stakeholder",
+	"process-model",
+	"diagram",
+	"project-deliverable",
+	"quiz",
+	"sql-lab",
+	"sql-pattern",
+	"ddl",
+	"query-error",
+	"reference",
+	"weekly-review",
+	"daily-note",
+];
+
+/** Artifact types treated as "in-person" delivery for quick-action and
+ * health-check purposes when a course's delivery is "hybrid" — a hybrid
+ * course still meets in person and generally uses the in-person folder
+ * shape, so hybrid is folded into the in-person branch everywhere the
+ * spec only defined online/in-person behavior. */
+export const HYBRID_COUNTS_AS_IN_PERSON = true;
