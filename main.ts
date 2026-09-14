@@ -103,15 +103,18 @@ export default class CourseCommandCenterPlugin extends Plugin {
 
 	/** Regenerates the dashboard file, if one is configured, from the current
 	 * (already up to date — callers rebuild the index first if needed) note
-	 * index. No-ops silently when dashboardFilePath is empty; shows a Notice
-	 * on write failure (e.g. a path collision with an unrelated file).
+	 * index. Never throws: returns a status the caller can inspect, and also
+	 * shows a Notice on failure for callers that don't check the return
+	 * value (e.g. the view's Refresh button).
 	 *
 	 * `canvasMatches` — pass the full match list from a just-completed sync
 	 * to also refresh the pending-notes cache used by
 	 * handlePossibleCanvasNoteCreation; omit it (not just `[]`, which means
 	 * "sync ran and found nothing unmatched") for a plain Refresh with no
 	 * new Canvas data, which leaves the previous cache as-is. */
-	async updateDashboardFileIfConfigured(canvasMatches?: CanvasSyncMatch[]): Promise<void> {
+	async updateDashboardFileIfConfigured(
+		canvasMatches?: CanvasSyncMatch[]
+	): Promise<{ status: "disabled" | "written" | "error"; message?: string }> {
 		if (canvasMatches) {
 			this.pendingCanvasNotes = new Map(
 				canvasMatches
@@ -120,7 +123,7 @@ export default class CourseCommandCenterPlugin extends Plugin {
 					.filter((entry): entry is [string, CanvasSyncMatch] => entry[0] !== null)
 			);
 		}
-		if (!this.settings.dashboardFilePath.trim()) return;
+		if (!this.settings.dashboardFilePath.trim()) return { status: "disabled" };
 		try {
 			await updateDashboardFile(
 				this.app,
@@ -129,9 +132,12 @@ export default class CourseCommandCenterPlugin extends Plugin {
 				this.settings,
 				canvasMatches ?? []
 			);
+			return { status: "written" };
 		} catch (error) {
-			new Notice(`Could not update the dashboard file: ${error instanceof Error ? error.message : "unknown error"}`);
+			const message = error instanceof Error ? error.message : "unknown error";
+			new Notice(`Could not update the dashboard file: ${message}`);
 			console.error("Course Command Center: dashboard file update failed", error);
+			return { status: "error", message };
 		}
 	}
 

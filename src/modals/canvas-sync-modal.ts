@@ -33,13 +33,22 @@ export class CanvasSyncModal extends Modal {
 			// dashboard-file update below reads the due dates just applied,
 			// not a stale pre-sync snapshot.
 			if (updatedCount > 0) this.plugin.noteIndex.rebuildNow();
-			await this.plugin.updateDashboardFileIfConfigured(unmatched);
+
+			const dashboardResult = await this.plugin.updateDashboardFileIfConfigured(unmatched);
+			const dashboardStatus =
+				dashboardResult.status === "written"
+					? `Dashboard file (${this.plugin.settings.dashboardFilePath}) updated.`
+					: dashboardResult.status === "error"
+						? `Dashboard file update failed: ${dashboardResult.message}.`
+						: "Dashboard file not configured.";
 
 			const skipped = events.length - matches.length;
-			statusEl.setText(
-				`Updated ${updatedCount} due date(s) on existing notes.` +
-					(skipped > 0 ? ` Skipped ${skipped} event(s) with no matching configured course.` : "")
-			);
+			statusEl.empty();
+			statusEl.createEl("div", {
+				text: `Fetched ${events.length} event(s) — ${matches.length} matched a configured course, ${skipped} skipped (no matching course).`,
+			});
+			statusEl.createEl("div", { text: `Updated ${updatedCount} due date(s) on existing notes.` });
+			statusEl.createEl("div", { text: dashboardStatus });
 
 			this.renderUnmatched(contentEl, unmatched);
 		} catch (error) {
