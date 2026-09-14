@@ -1,4 +1,4 @@
-import { Editor, Plugin, WorkspaceLeaf } from "obsidian";
+import { Editor, Notice, Plugin, WorkspaceLeaf } from "obsidian";
 import { CourseCommandCenterView } from "./src/views/course-command-center-view";
 import { CourseCommandCenterSettingTab } from "./src/settings";
 import { DEFAULT_SETTINGS, PLUGIN_VIEW_TYPE } from "./src/constants";
@@ -9,6 +9,7 @@ import { runHealthCheck } from "./src/services/health-check-service";
 import { HealthCheckModal } from "./src/modals/health-check-modal";
 import { CreateNoteModal } from "./src/modals/create-note-modal";
 import { DashboardInsertModal, buildDashboardBlock } from "./src/modals/dashboard-insert-modal";
+import { CanvasSyncModal } from "./src/modals/canvas-sync-modal";
 import { activeCourses, deriveQuickActions } from "./src/services/course-service";
 import type { OptionalPluginStatus } from "./src/types";
 
@@ -44,6 +45,12 @@ export default class CourseCommandCenterPlugin extends Plugin {
 			id: "insert-course-command-center-block",
 			name: "Insert Course Command Center block into current note",
 			editorCallback: (editor) => this.insertDashboardBlock(editor),
+		});
+
+		this.addCommand({
+			id: "sync-canvas-calendar",
+			name: "Sync Canvas calendar",
+			callback: () => this.syncCanvasCalendar(),
 		});
 
 		this.registerQuickActionCommands();
@@ -118,6 +125,21 @@ export default class CourseCommandCenterPlugin extends Plugin {
 			await leaf.setViewState({ type: PLUGIN_VIEW_TYPE, active: true });
 		}
 		workspace.revealLeaf(leaf);
+	}
+
+	syncCanvasCalendar(): void {
+		if (!this.settings.canvasIcsUrl.trim()) {
+			new Notice("Add your Canvas calendar feed URL in Settings → Course Command Center first.");
+			return;
+		}
+		new CanvasSyncModal(this.app, {
+			icsUrl: this.settings.canvasIcsUrl.trim(),
+			notes: this.noteIndex.getNotes(),
+			courses: activeCourses(this.settings.courses),
+			templatesFolder: this.settings.templatesFolder,
+			templaterInstalled: this.getOptionalPluginStatus().templater,
+			onSynced: () => this.noteIndex.requestRefresh(),
+		}).open();
 	}
 
 	private async runHealthCheckCommand(): Promise<void> {

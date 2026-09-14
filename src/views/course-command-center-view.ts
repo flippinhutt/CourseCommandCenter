@@ -94,6 +94,11 @@ export class CourseCommandCenterView extends ItemView {
 
 		const healthBtn = buttons.createEl("button", { text: "Run course health check", attr: { "aria-label": "Run course health check" } });
 		healthBtn.addEventListener("click", () => void this.runHealthCheck());
+
+		if (this.plugin.settings.canvasIcsUrl.trim()) {
+			const syncBtn = buttons.createEl("button", { text: "Sync Canvas calendar", attr: { "aria-label": "Sync Canvas calendar" } });
+			syncBtn.addEventListener("click", () => this.plugin.syncCanvasCalendar());
+		}
 	}
 
 	private async runHealthCheck(): Promise<void> {

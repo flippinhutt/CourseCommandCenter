@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	upcomingDeadlineWindowDays: 7,
 	includeCheckboxTasks: true,
 	staleLectureWindowDays: 10,
+	canvasIcsUrl: "",
 };
 
 /** Artifact types with a hand-written fallback template and, for some, a

@@ -35,8 +35,11 @@ folder-and-Markdown workflow.
 
 ## What it does not do
 
-- No network calls, no Canvas API sync, no telemetry, no analytics, no AI,
-  no cloud sync, no login — v1 is entirely local.
+- No telemetry, no analytics, no AI, no cloud sync, no login, no network
+  calls of any kind — **except** the one you explicitly opt into: syncing
+  your Canvas calendar feed (see below). That fetch only happens when you
+  click "Sync Canvas calendar" yourself; there is no background polling and
+  nothing else in the plugin ever leaves your machine.
 - It never deletes, overwrites, or renames your notes. Creating a note that
   would collide with an existing file is blocked, not silently renamed —
   you're asked to choose a different title.
@@ -144,6 +147,42 @@ module, discussion, sql-lab, database-design, requirement,
 project-deliverable) — a fully custom type just doesn't get a dedicated
 check.
 
+## Canvas calendar sync (optional)
+
+Automates keeping "Do next" and "Upcoming deadlines" current by pulling due
+dates from Canvas, without ever calling the Canvas API or storing a login
+token.
+
+1. In Canvas, go to **Calendar → Calendar Feed** (usually bottom-left of the
+   calendar page) and copy the ICS URL it gives you. This URL is
+   unauthenticated but effectively a secret — anyone who has it can see your
+   calendar — so treat it like a password.
+2. Paste it into **Settings → Course Command Center → Canvas calendar feed
+   URL**.
+3. Run **Sync Canvas calendar** (command palette, or the button in the view
+   header once a URL is configured).
+
+What happens on sync:
+
+- The feed is fetched once, parsed, and each event is matched to a
+  configured course via the `[Course Code]` Canvas appends to every event
+  title.
+- For an event that matches an **existing note** (matched first by a
+  `id:` frontmatter field stamped by a prior sync, falling back to a
+  same-course, same-title match) — its `due:` frontmatter is updated
+  automatically as part of this one sync action, and `id:` is backfilled if
+  the note didn't already have one. Nothing else about the note is touched.
+- For an event with **no matching note**, it's listed in a review panel;
+  nothing is created until you click "Create note" on that specific item —
+  consistent with the plugin never bulk-creating files without a per-item
+  action.
+- An event whose course doesn't match any configured course is silently
+  skipped (there's nowhere to route it).
+
+This is read-only against Canvas (the ICS feed can't be written to) and is
+the plugin's one deliberate exception to "no network calls" — it's entirely
+optional, and everything else keeps working with the field left empty.
+
 ## Optional plugin integration
 
 Detected by plugin ID only, never required: Tasks, Dataview, Templater,
@@ -196,6 +235,10 @@ Excalidraw, Linter, QuickAdd, Obsidian Git. Status is shown in Settings.
 - Backlink discovery in the assignment detail panel is based on outgoing
   wikilinks parsed from the note body, not Obsidian's resolved-backlinks
   index.
+- Canvas sync matches events to courses by the `[Course Code]` text Canvas
+  appends to each calendar event title — if your institution's Canvas
+  instance formats that differently, or a course's code in Settings doesn't
+  appear in it, those events won't match and won't be routed anywhere.
 - Command-palette quick-action entries are (re-)registered when you add,
   remove, or edit a course/folder-map entry in Settings, but a command for
   a type you've since deleted only disappears after Obsidian restarts or
@@ -218,5 +261,12 @@ Excalidraw, Linter, QuickAdd, Obsidian Git. Status is shown in Settings.
 
 ## Privacy
 
-No network requests, no telemetry, no analytics, no AI calls, no Canvas API
-calls. All data stays in this vault or in this plugin's local settings.
+No telemetry, no analytics, no AI calls, no login, no Canvas API calls. The
+only network request the plugin ever makes is fetching your Canvas ICS
+calendar feed, and only if you've configured a feed URL and explicitly
+clicked "Sync Canvas calendar" — never automatically or in the background.
+All data otherwise stays in this vault or in this plugin's local settings.
+
+## License
+
+[MIT](LICENSE)

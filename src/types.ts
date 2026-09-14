@@ -87,6 +87,11 @@ export interface PluginSettings {
 	upcomingDeadlineWindowDays: number;
 	includeCheckboxTasks: boolean;
 	staleLectureWindowDays: number;
+	/** Canvas's private per-account ICS calendar feed URL (Canvas → Calendar
+	 * → Calendar Feed). Optional. This is the one deliberate exception to the
+	 * plugin's no-network-calls rule: fetched only when the user explicitly
+	 * runs "Sync Canvas calendar," never automatically or in the background. */
+	canvasIcsUrl: string;
 }
 
 /** Parsed frontmatter properties the plugin cares about; all optional. */
@@ -137,6 +142,27 @@ export interface RubricRow {
 export interface RubricTable {
 	heading: string;
 	rows: RubricRow[];
+}
+
+/** A single event parsed from a Canvas ICS calendar feed. */
+export interface IcsEvent {
+	uid: string;
+	/** Event title with any trailing "[Course Code]" bracket stripped. */
+	title: string;
+	/** Local calendar date (YYYY-MM-DD), or null if unparseable. */
+	due: string | null;
+	/** The bracketed course-code-like text found in the raw title, if any
+	 * (Canvas's feed suffixes each event's title with its course). */
+	courseCodeHint: string | null;
+	url: string | null;
+}
+
+/** One Canvas ICS event matched against configured courses and existing
+ * vault notes. */
+export interface CanvasSyncMatch {
+	event: IcsEvent;
+	matchedCourse: CourseConfig | null;
+	matchedNote: IndexedNote | null;
 }
 
 export const OPTIONAL_PLUGIN_IDS = {

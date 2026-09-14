@@ -126,6 +126,26 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 				})
 			);
 
+		containerEl.createEl("h3", { text: "Canvas calendar sync (optional)" });
+		containerEl.createEl("p", {
+			text:
+				"The plugin makes no network calls except this one, and only when you explicitly click Sync — " +
+				"never automatically. Find your feed URL in Canvas: Calendar → Calendar Feed (bottom-left), then copy the ICS link. " +
+				"Treat it like a password — anyone with the URL can see your Canvas calendar.",
+			cls: "setting-item-description",
+		});
+		new Setting(containerEl)
+			.setName("Canvas calendar feed URL")
+			.addText((text) =>
+				text
+					.setPlaceholder("https://<school>.instructure.com/feeds/calendars/user_....ics")
+					.setValue(this.plugin.settings.canvasIcsUrl)
+					.onChange(async (value) => {
+						this.plugin.settings.canvasIcsUrl = value.trim();
+						await this.plugin.saveSettings();
+					})
+			);
+
 		containerEl.createEl("h3", { text: "Courses" });
 
 		for (const course of this.plugin.settings.courses) {

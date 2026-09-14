@@ -52,6 +52,12 @@ src/
                                   health-check-service.
     dashboard-insert-modal.ts    Presents the Plain/Tasks/Dataview choice
                                   and builds the inserted Markdown block.
+    canvas-sync-modal.ts          Fetches + matches on open, applies due
+                                  dates to matched notes immediately (the
+                                  sync click itself is the explicit
+                                  confirmation), then lists unmatched events
+                                  with a per-item "Create note" button —
+                                  nothing is created without that click.
 
   services/
     course-service.ts            Pure course lookups: course-code matching
@@ -93,6 +99,24 @@ src/
     optional-plugin-service.ts   Detects Tasks/Dataview/Templater/
                                   Excalidraw/Linter/QuickAdd/Git by plugin
                                   ID; never throws if one is absent.
+    canvas-match.ts               Pure event-to-course-and-note matching
+                                  for Canvas sync (IcsEvent[] + IndexedNote[]
+                                  + CourseConfig[] -> CanvasSyncMatch[]). No
+                                  Obsidian API usage, deliberately split out
+                                  of canvas-sync-service.ts so it can be
+                                  imported by tests without pulling in
+                                  requestUrl/TFile (the "obsidian" package
+                                  ships types only — importing any of its
+                                  values outside the Obsidian runtime fails
+                                  at module load, not at the call site).
+    canvas-sync-service.ts       Obsidian-API side of Canvas sync: fetches
+                                  the ICS feed (requestUrl), applies a
+                                  matched event's due date via
+                                  processFrontMatter, and creates a note for
+                                  an unmatched event through
+                                  template-service. Re-exports
+                                  matchCanvasEvents from canvas-match.ts so
+                                  callers only need one import.
 
   utils/
     dates.ts                     Local-calendar-date parsing/formatting and
@@ -106,17 +130,28 @@ src/
     frontmatter.ts               Converts raw metadata-cache frontmatter
                                   into the typed NoteProperties shape,
                                   tolerating missing/unknown fields.
+    ics.ts                       Pure RFC 5545 ICS parser (line unfolding,
+                                  property parsing, UTC/local date
+                                  conversion) producing IcsEvent[]. Knows
+                                  nothing about courses or notes — that's
+                                  canvas-match.ts's job.
     tasks.ts                     Tasks-plugin due-date emoji extraction from
                                   checklist lines.
 ```
 
 ## Why the pure-function / service / UI split
 
-- `utils/` and `services/health-check-rules.ts` take no Obsidian `App`
-  dependency and do no I/O — they're the layer the unit tests exercise
-  directly (course-code matching, date/due-state math, filename
-  sanitization, rubric-table parsing, health-check rule evaluation).
-- `services/*` (other than `health-check-rules.ts`) hold the Obsidian-API-
+- `utils/` and `services/health-check-rules.ts` / `services/canvas-match.ts`
+  take no Obsidian `App` dependency and do no I/O — they're the layer the
+  unit tests exercise directly (course-code matching, date/due-state math,
+  filename sanitization, rubric-table parsing, health-check rule evaluation,
+  ICS parsing, Canvas-event-to-note matching). This split isn't just a style
+  preference: importing anything from the real `obsidian` package's runtime
+  (as opposed to `import type`) outside Obsidian itself fails at module load
+  time, since that package ships only type declarations — so any module a
+  test imports has to be obsidian-import-free on its own, not just in the
+  function under test.
+- `services/*` (other than the two above) hold the Obsidian-API-
   dependent orchestration: reading files, walking the metadata cache,
   detecting other plugins.
 - `views/` and `modals/` hold only rendering and user-interaction wiring.

@@ -68,6 +68,7 @@ function buildFrontmatter(fields: {
 	created: string;
 	due?: string;
 	module?: string;
+	id?: string;
 }): string {
 	const lines = [
 		"---",
@@ -79,6 +80,7 @@ function buildFrontmatter(fields: {
 	];
 	if (fields.due) lines.push(`due: ${fields.due}`);
 	if (fields.module) lines.push(`module: ${yamlScalar(fields.module)}`);
+	if (fields.id) lines.push(`id: ${yamlScalar(fields.id)}`);
 	lines.push("---", "");
 	return lines.join("\n");
 }
@@ -89,6 +91,9 @@ export interface CreateNoteParams {
 	course: CourseConfig;
 	artifactType: string;
 	due?: string;
+	/** Stable external id (e.g. a Canvas calendar UID) to stamp into
+	 * frontmatter so a later sync can re-match this note reliably. */
+	id?: string;
 	templatesFolder: string;
 	templaterInstalled: boolean;
 	isInPersonLike: boolean;
@@ -140,6 +145,7 @@ export async function createNoteFromTemplate(app: App, params: CreateNoteParams)
 		status: "not-started",
 		created: formatIsoDate(new Date()),
 		due: params.due,
+		id: params.id,
 	});
 
 	const file = await app.vault.create(path, frontmatter + body);

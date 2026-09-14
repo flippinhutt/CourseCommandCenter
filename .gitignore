@@ -2,11 +2,26 @@ node_modules/
 main.js
 *.js.map
 .DS_Store
+Thumbs.db
 
 # personal test-vault data (this repo ships fixtures, not a live vault)
 test-vault/
 *.local.md
+data.json
+
+# secrets / env
+.env
+.env.*
+
+# build/test output
+coverage/
+dist/
+*.log
 
 # editor / OS
 .vscode/
 .idea/
+
+# agent-facing docs, kept locally but not published
+CLAUDE.md
+claude-code-prompt-course-command-center.md
