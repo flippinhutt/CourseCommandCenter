@@ -3,7 +3,7 @@ import type CourseCommandCenterPlugin from "../../main";
 import { CSS_PREFIX, PLUGIN_VIEW_TYPE } from "../constants";
 import type { CanvasSyncMatch, CourseConfig, IndexedNote } from "../types";
 import { activeCourses, deriveQuickActions, folderForArtifact, isInPersonLike } from "../services/course-service";
-import { compareDueDates, dueState, formatHumanDate, parseLocalDate } from "../utils/dates";
+import { compareDueDates, dueState, formatHumanDate, isPastDue, parseLocalDate } from "../utils/dates";
 import { CreateNoteModal } from "../modals/create-note-modal";
 import { AssignmentDetailModal } from "../modals/assignment-detail-modal";
 import { runHealthCheck } from "../services/health-check-service";
@@ -301,16 +301,19 @@ export class CourseCommandCenterView extends ItemView {
 		const windowDays = this.plugin.settings.upcomingDeadlineWindowDays;
 		const noteItems = this.notesForSelection().map(noteItem);
 		const canvasItems: DisplayItem[] = this.canvasItemsForSelection().map((match) => ({ kind: "canvas", match }));
-		const dated = [...noteItems, ...canvasItems];
+		// Past due is excluded, not just deprioritized — this is a forward
+		// planning list. A note due today still counts (isPastDue is
+		// strictly-before-today), and genuinely overdue work is what the
+		// health check's "action needed" severity is for instead.
+		const dated = [...noteItems, ...canvasItems].filter((i) => !isPastDue(itemDue(i)));
 
-		const overdue = dated.filter((i) => dueState(itemDue(i), windowDays) === "overdue");
 		const dueToday = dated.filter((i) => dueState(itemDue(i), windowDays) === "today");
 		const dueSoon = dated.filter((i) => dueState(itemDue(i), windowDays) === "upcoming");
 		const noDueInProgress = noteItems.filter((i) => !i.note.props.due && i.note.props.status === "in-progress");
 
 		const seen = new Set<string>();
 		const ordered: DisplayItem[] = [];
-		for (const group of [overdue, dueToday, dueSoon, noDueInProgress]) {
+		for (const group of [dueToday, dueSoon, noDueInProgress]) {
 			for (const item of group.sort((a, b) => compareDueDates(itemDue(a), itemDue(b)))) {
 				const key = itemKey(item);
 				if (seen.has(key)) continue;
@@ -329,9 +332,11 @@ export class CourseCommandCenterView extends ItemView {
 
 	private buildUpcoming(): DisplayItem[] {
 		const noteItems: DisplayItem[] = this.notesForSelection()
-			.filter((n) => Boolean(parseLocalDate(n.props.due)))
+			.filter((n) => Boolean(parseLocalDate(n.props.due)) && !isPastDue(n.props.due))
 			.map(noteItem);
-		const canvasItems: DisplayItem[] = this.canvasItemsForSelection().map((match) => ({ kind: "canvas", match }));
+		const canvasItems: DisplayItem[] = this.canvasItemsForSelection()
+			.filter((m) => !isPastDue(m.event.due ?? undefined))
+			.map((match) => ({ kind: "canvas" as const, match }));
 		return [...noteItems, ...canvasItems].sort((a, b) => compareDueDates(itemDue(a), itemDue(b)));
 	}
 

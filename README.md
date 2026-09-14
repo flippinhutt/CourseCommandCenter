@@ -158,11 +158,19 @@ default = disabled) and it starts getting written.
 The file has three sections, in this order:
 
 - **Deadlines** — every active (not complete/submitted) note with a due
-  date, across all your courses, sorted chronologically. The master list.
+  date of today or later, across all your courses, sorted chronologically.
+  The master list.
 - **Current work** — the subset due within the "Upcoming deadline window"
   setting (default 7 days).
 - **Do next** — the subset due within the "Do next window" setting (default
-  2 days), including anything overdue.
+  2 days).
+
+**Past due is excluded, not just deprioritized.** A due date before today
+never appears in any section — this is a forward-planning list, not a
+backlog. A due date of exactly today still counts as current. Neglected
+overdue work isn't ignored by the plugin entirely; it's what **Run course
+health check**'s "Action needed" severity is specifically for, kept
+separate from day-to-day planning on purpose.
 
 Sections overlap on purpose: something due tomorrow shows up in all three,
 so each section is a complete view at its own zoom level rather than a
@@ -172,6 +180,16 @@ those show up here too. The **live Course Command Center view** shows the
 same combined picture in its "Do next" and "Upcoming deadlines" sections —
 the file and the view are two renderings of the same underlying data, not
 two separate things to keep in sync with each other.
+
+**Real notes render as checkboxes; check one off and it's gone next
+update.** A line for an existing vault note is a literal `- [ ]` you can
+click in Obsidian. Checking it sets that note's `status:` frontmatter to
+`complete`, which is what actually makes it disappear — the plugin watches
+the dashboard file for a checked box, updates the note, and regenerates the
+file right after, so the item drops out rather than staying checked-but-
+present. A not-yet-created Canvas item is a plain link instead, since
+there's no note yet to mark complete — click it to create one first (see
+below).
 
 It's fully regenerated (not appended to) every time it updates — clicking
 **Refresh** in the view, and after a **Sync Canvas calendar** run, both
@@ -301,6 +319,11 @@ Excalidraw, Linter, QuickAdd, Obsidian Git. Status is shown in Settings.
   Obsidian restart, but only after at least one Refresh or Sync post-
   restart repopulates it. Click a link before that first Refresh and
   Obsidian still creates the note, just blank instead of filled in.
+- Checking a dashboard-file checkbox only marks that note complete — it
+  doesn't work by parsing arbitrary checkbox text, only lines the plugin
+  itself generated with a recognizable wikilink. Checking a box you added
+  yourself elsewhere in the file (outside the auto-generated sections)
+  does nothing.
 - Command-palette quick-action entries are (re-)registered when you add,
   remove, or edit a course/folder-map entry in Settings, but a command for
   a type you've since deleted only disappears after Obsidian restarts or

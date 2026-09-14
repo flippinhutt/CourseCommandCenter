@@ -1,5 +1,5 @@
 import type { CanvasSyncMatch, CourseConfig, IndexedNote } from "../types";
-import { compareDueDates, daysFromToday, parseLocalDate } from "../utils/dates";
+import { compareDueDates, daysFromToday, isPastDue, parseLocalDate } from "../utils/dates";
 import { DASHBOARD_FILE_MARKER } from "../constants";
 import { getCourseById } from "./course-service";
 import { pendingCanvasNotePath } from "./canvas-match";
@@ -11,13 +11,17 @@ const ACTIVE_STATUSES = new Set(["not-started", "in-progress", "blocked", "revie
  * note yet — the path a note for it *would* get, so clicking the link
  * creates it (Obsidian's native unresolved-link behavior; the plugin then
  * populates the blank note it creates). `canvasUrl`, when present, is
- * always a secondary "view on Canvas" link shown alongside. */
+ * always a secondary "view on Canvas" link shown alongside. `isExistingNote`
+ * decides whether the line renders as a checkbox — only a real note can be
+ * "checked off" (which marks it complete); a not-yet-created Canvas item
+ * can't be completed before it exists. */
 export interface DashboardLine {
 	label: string;
 	due: string;
 	courseLabel: string | null;
 	linkPath: string | null;
 	canvasUrl: string | null;
+	isExistingNote: boolean;
 }
 
 function fromNote(note: IndexedNote, courses: CourseConfig[]): DashboardLine | null {
@@ -30,6 +34,7 @@ function fromNote(note: IndexedNote, courses: CourseConfig[]): DashboardLine | n
 		courseLabel: course?.displayName ?? null,
 		linkPath: note.path,
 		canvasUrl: null,
+		isExistingNote: true,
 	};
 }
 
@@ -41,12 +46,15 @@ function fromUnmatchedCanvasEvent(match: CanvasSyncMatch): DashboardLine | null 
 		courseLabel: match.matchedCourse?.displayName ?? null,
 		linkPath: pendingCanvasNotePath(match),
 		canvasUrl: match.event.url,
+		isExistingNote: false,
 	};
 }
 
 /** Builds the full, chronologically-sorted "Deadlines" pool: every active
  * (non-complete/submitted) vault note with a due date, plus any Canvas
- * events that don't have a matching note yet. Pure — no Obsidian API. */
+ * events that don't have a matching note yet — excluding anything due
+ * before today. "Past due" means strictly before today; a due date of
+ * today still counts as current, not past. Pure — no Obsidian API. */
 export function buildDashboardLines(notes: IndexedNote[], courses: CourseConfig[], canvasMatches: CanvasSyncMatch[] = []): DashboardLine[] {
 	const lines: DashboardLine[] = [];
 	for (const note of notes) {
@@ -57,7 +65,7 @@ export function buildDashboardLines(notes: IndexedNote[], courses: CourseConfig[
 		const line = fromUnmatchedCanvasEvent(match);
 		if (line) lines.push(line);
 	}
-	return lines.sort((a, b) => compareDueDates(a.due, b.due));
+	return lines.filter((l) => !isPastDue(l.due)).sort((a, b) => compareDueDates(a.due, b.due));
 }
 
 /** True if `due` is today, in the past (overdue), or within the next `days`
@@ -72,7 +80,8 @@ function formatLine(line: DashboardLine): string {
 	const course = line.courseLabel ? ` (${line.courseLabel})` : "";
 	const primary = line.linkPath ? `[[${line.linkPath.replace(/\.md$/i, "")}|${line.label}]]` : line.label;
 	const canvasSuffix = line.canvasUrl ? ` ([Canvas](${line.canvasUrl}))` : "";
-	return `- ${primary}${canvasSuffix} — due ${line.due}${course}`;
+	const prefix = line.isExistingNote ? "- [ ] " : "- ";
+	return `${prefix}${primary}${canvasSuffix} — due ${line.due}${course}`;
 }
 
 function section(title: string, items: DashboardLine[]): string {

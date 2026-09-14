@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareDueDates, dueState, formatIsoDate, parseLocalDate } from "./dates";
+import { compareDueDates, dueState, formatIsoDate, isPastDue, parseLocalDate } from "./dates";
 
 describe("parseLocalDate", () => {
 	it("parses a plain ISO date as a local date", () => {
@@ -55,6 +55,29 @@ describe("dueState", () => {
 
 	it("returns none when there is no due date", () => {
 		expect(dueState(undefined, 7)).toBe("none");
+	});
+});
+
+describe("isPastDue", () => {
+	it("is false for today", () => {
+		expect(isPastDue(formatIsoDate(new Date()))).toBe(false);
+	});
+
+	it("is false for a future date", () => {
+		const future = new Date();
+		future.setDate(future.getDate() + 1);
+		expect(isPastDue(formatIsoDate(future))).toBe(false);
+	});
+
+	it("is true for yesterday", () => {
+		const yesterday = new Date();
+		yesterday.setDate(yesterday.getDate() - 1);
+		expect(isPastDue(formatIsoDate(yesterday))).toBe(true);
+	});
+
+	it("is false for an unparseable or missing value", () => {
+		expect(isPastDue("not a date")).toBe(false);
+		expect(isPastDue(undefined)).toBe(false);
 	});
 });
 

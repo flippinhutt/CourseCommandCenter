@@ -1,4 +1,4 @@
-import { Editor, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { Editor, Notice, normalizePath, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import { CourseCommandCenterView } from "./src/views/course-command-center-view";
 import { CourseCommandCenterSettingTab } from "./src/settings";
 import { DEFAULT_SETTINGS, PLUGIN_VIEW_TYPE } from "./src/constants";
@@ -14,6 +14,7 @@ import { activeCourses, deriveQuickActions, isInPersonLike } from "./src/service
 import { updateDashboardFile } from "./src/services/dashboard-file-service";
 import { matchCanvasEvents, pendingCanvasNotePath } from "./src/services/canvas-match";
 import { populateExistingNote } from "./src/services/template-service";
+import { extractChecklistItems } from "./src/utils/markdown";
 import type { CanvasSyncMatch, OptionalPluginStatus } from "./src/types";
 
 /** A just-created file is only ever "upgraded" from a pending Canvas-event
@@ -33,6 +34,12 @@ export default class CourseCommandCenterPlugin extends Plugin {
 	 * create a blank note) trigger populating that note properly instead of
 	 * leaving it blank. */
 	private pendingCanvasNotes = new Map<string, CanvasSyncMatch>();
+	/** Set for the duration of the plugin's own write to the dashboard file,
+	 * so the vault "modify" listener below can tell "we just regenerated it"
+	 * apart from "the user checked a box in it" and skip re-processing its
+	 * own writes (which are always freshly unchecked anyway, so it'd be a
+	 * harmless no-op either way — this just avoids the wasted read). */
+	private isWritingDashboardFile = false;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -86,6 +93,15 @@ export default class CourseCommandCenterPlugin extends Plugin {
 				if (file instanceof TFile) void this.handlePossibleCanvasNoteCreation(file);
 			})
 		);
+		this.registerEvent(
+			this.app.vault.on("modify", (file) => {
+				if (!(file instanceof TFile) || this.isWritingDashboardFile) return;
+				const dashboardPath = this.settings.dashboardFilePath.trim();
+				if (dashboardPath && file.path === normalizePath(dashboardPath)) {
+					void this.handleDashboardFileEdited(file);
+				}
+			})
+		);
 	}
 
 	onunload(): void {
@@ -130,6 +146,7 @@ export default class CourseCommandCenterPlugin extends Plugin {
 		);
 
 		if (!this.settings.dashboardFilePath.trim()) return { status: "disabled" };
+		this.isWritingDashboardFile = true;
 		try {
 			await updateDashboardFile(this.app, this.noteIndex.getNotes(), activeCourses(this.settings.courses), this.settings, canvasMatches);
 			return { status: "written" };
@@ -138,6 +155,46 @@ export default class CourseCommandCenterPlugin extends Plugin {
 			new Notice(`Could not update the dashboard file: ${message}`);
 			console.error("Course Command Center: dashboard file update failed", error);
 			return { status: "error", message };
+		} finally {
+			this.isWritingDashboardFile = false;
+		}
+	}
+
+	/** Fires when the dashboard file changes and it wasn't the plugin's own
+	 * write. The only edit that matters is checking a box — a note's
+	 * wikilink line, checked, means "mark this note complete." Marking it
+	 * complete makes fromNote (dashboard-content.ts) exclude it, so it drops
+	 * off the list on the regeneration this triggers — that's the whole
+	 * "disappears when completed" behavior; there's no separate removal
+	 * step. Canvas-only lines never render as checkboxes (nothing to mark
+	 * complete before a note exists for them), so nothing here creates a
+	 * note — only handlePossibleCanvasNoteCreation's wikilink-click path
+	 * does that. */
+	private async handleDashboardFileEdited(file: TFile): Promise<void> {
+		try {
+			const content = await this.app.vault.cachedRead(file);
+			const checkedLines = extractChecklistItems(content).filter((item) => item.checked);
+			if (checkedLines.length === 0) return;
+
+			let markedAny = false;
+			for (const item of checkedLines) {
+				const linkMatch = /\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/.exec(item.text);
+				if (!linkMatch) continue;
+				const notePath = normalizePath(`${linkMatch[1]}.md`);
+				const noteFile = this.app.vault.getAbstractFileByPath(notePath);
+				if (!(noteFile instanceof TFile)) continue;
+				await this.app.fileManager.processFrontMatter(noteFile, (fm) => {
+					fm.status = "complete";
+				});
+				markedAny = true;
+			}
+
+			if (markedAny) {
+				this.noteIndex.rebuildNow();
+				void this.updateDashboardFileIfConfigured();
+			}
+		} catch (error) {
+			console.error("Course Command Center: failed to process a checked dashboard-file item", error);
 		}
 	}
 

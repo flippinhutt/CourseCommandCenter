@@ -55,6 +55,15 @@ export function dueState(dueValue: string | undefined, windowDays: number): DueS
 	return "later";
 }
 
+/** True if `dueValue` parses to a date strictly before today (i.e. is
+ * overdue). False for today, any future date, or an unparseable/missing
+ * value — "past due" means yesterday or earlier, not today. */
+export function isPastDue(dueValue: string | undefined): boolean {
+	const date = parseLocalDate(dueValue);
+	if (!date) return false;
+	return daysFromToday(date) < 0;
+}
+
 export function compareDueDates(a: string | undefined, b: string | undefined): number {
 	const dateA = parseLocalDate(a);
 	const dateB = parseLocalDate(b);

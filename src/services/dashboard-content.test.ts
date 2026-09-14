@@ -110,6 +110,36 @@ describe("buildDashboardLines", () => {
 		const lines = buildDashboardLines(notes, [course()]);
 		expect(lines.map((l) => l.linkPath)).toEqual(["sooner.md", "later.md"]);
 	});
+
+	it("excludes a note due yesterday but keeps one due today", () => {
+		const notes = [
+			note({ path: "yesterday.md", props: { due: daysFromNowIso(-1), status: "in-progress" } }),
+			note({ path: "today.md", props: { due: daysFromNowIso(0), status: "in-progress" } }),
+		];
+		const lines = buildDashboardLines(notes, [course()]);
+		expect(lines.map((l) => l.linkPath)).toEqual(["today.md"]);
+	});
+
+	it("excludes a past-due unmatched Canvas event", () => {
+		const match: CanvasSyncMatch = {
+			event: { uid: "u1", title: "Old Quiz", due: daysFromNowIso(-3), courseCodeHint: "ITSE 1350", url: null },
+			matchedCourse: course(),
+			matchedNote: null,
+		};
+		expect(buildDashboardLines([], [course()], [match])).toEqual([]);
+	});
+
+	it("marks a real note as an existing note and an unmatched Canvas event as not", () => {
+		const notes = [note({ props: { due: daysFromNowIso(1), status: "in-progress" } })];
+		const match: CanvasSyncMatch = {
+			event: { uid: "u1", title: "Homework 4", due: daysFromNowIso(1), courseCodeHint: "ITSE 1350", url: null },
+			matchedCourse: course(),
+			matchedNote: null,
+		};
+		const lines = buildDashboardLines(notes, [course()], [match]);
+		expect(lines.find((l) => l.linkPath === "Course/Note.md")?.isExistingNote).toBe(true);
+		expect(lines.find((l) => l.linkPath === "Course/Homework 4.md")?.isExistingNote).toBe(false);
+	});
 });
 
 describe("buildDashboardMarkdown", () => {
@@ -145,5 +175,24 @@ describe("buildDashboardMarkdown", () => {
 		const markdown = buildDashboardMarkdown(lines, 2, 7, "2026-09-14");
 		expect(markdown).toContain("[[Course/Homework 4|Homework 4]]");
 		expect(markdown).toContain("([Canvas](https://canvas.example/x))");
+	});
+
+	it("renders a real note's line as a checkbox", () => {
+		const notes = [note({ props: { due: daysFromNowIso(1), status: "in-progress" } })];
+		const lines = buildDashboardLines(notes, [course()]);
+		const markdown = buildDashboardMarkdown(lines, 2, 7, "2026-09-14");
+		expect(markdown).toContain("- [ ] [[Course/Note|Note]]");
+	});
+
+	it("renders an unmatched Canvas-only line without a checkbox", () => {
+		const match: CanvasSyncMatch = {
+			event: { uid: "u1", title: "Homework 4", due: daysFromNowIso(1), courseCodeHint: "ITSE 1350", url: null },
+			matchedCourse: course(),
+			matchedNote: null,
+		};
+		const lines = buildDashboardLines([], [course()], [match]);
+		const markdown = buildDashboardMarkdown(lines, 2, 7, "2026-09-14");
+		expect(markdown).toContain("- [[Course/Homework 4|Homework 4]]");
+		expect(markdown).not.toContain("[ ] [[Course/Homework 4|Homework 4]]");
 	});
 });

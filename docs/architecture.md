@@ -51,6 +51,22 @@ main.ts                          Plugin entry point: registers the view,
                                   create a blank note, and this is what
                                   turns that blank note into a properly
                                   templated one.
+
+                                  A second vault listener, on "modify",
+                                  watches specifically for edits to the
+                                  configured dashboard file and looks for a
+                                  newly-checked box whose text contains a
+                                  wikilink — isWritingDashboardFile guards
+                                  it from reacting to the plugin's own
+                                  regeneration writes. A match sets that
+                                  note's status to complete via
+                                  processFrontMatter, then triggers a
+                                  regeneration; dashboard-content.ts's
+                                  fromNote already excludes non-active
+                                  statuses, so the item disappearing on the
+                                  next render *is* the "complete" effect —
+                                  there's no separate "delete this line"
+                                  step anywhere.
 src/
   settings.ts                    Settings tab UI only. Reads/writes
                                   PluginSettings via the plugin instance;
@@ -80,7 +96,12 @@ src/
                                   "Current work"/"Recently created"/
                                   "Feedback to process" only ever contain
                                   note items, since Canvas-only entries have
-                                  no type/status until a note exists.
+                                  no type/status until a note exists. Both
+                                  due-date sections filter out isPastDue
+                                  items — forward planning only; overdue
+                                  work surfaces through the health check's
+                                  "Action needed" severity instead, a
+                                  deliberately separate concern.
 
   modals/
     create-note-modal.ts         Collects a title (+ optional due date),
@@ -174,11 +195,17 @@ src/
                                   callers only need one import.
     dashboard-content.ts          Pure: builds the sorted Deadlines pool
                                   (buildDashboardLines) from IndexedNote[] +
-                                  unmatched CanvasSyncMatch[], and renders it
-                                  to Markdown (buildDashboardMarkdown) with
-                                  overlapping Deadlines/Current work/Do next
-                                  sections. No Obsidian API — same reasoning
-                                  as canvas-match.ts.
+                                  unmatched CanvasSyncMatch[] — excluding
+                                  anything isPastDue (before today; today
+                                  itself stays) — and renders it to Markdown
+                                  (buildDashboardMarkdown) with overlapping
+                                  Deadlines/Current work/Do next sections.
+                                  Each DashboardLine carries isExistingNote:
+                                  a real note's line renders as a `- [ ]`
+                                  checkbox, a not-yet-created Canvas line as
+                                  a plain link, since only the former has
+                                  something to mark complete. No Obsidian
+                                  API — same reasoning as canvas-match.ts.
     dashboard-file-service.ts    Obsidian-API side: writes dashboard-
                                   content.ts's output to the configured
                                   path via vault.create/modify. Refuses to
