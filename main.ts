@@ -1,4 +1,4 @@
-import { Editor, Notice, Plugin, WorkspaceLeaf } from "obsidian";
+import { Editor, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import { CourseCommandCenterView } from "./src/views/course-command-center-view";
 import { CourseCommandCenterSettingTab } from "./src/settings";
 import { DEFAULT_SETTINGS, PLUGIN_VIEW_TYPE } from "./src/constants";
@@ -10,14 +10,29 @@ import { HealthCheckModal } from "./src/modals/health-check-modal";
 import { CreateNoteModal } from "./src/modals/create-note-modal";
 import { DashboardInsertModal, buildDashboardBlock } from "./src/modals/dashboard-insert-modal";
 import { CanvasSyncModal } from "./src/modals/canvas-sync-modal";
-import { activeCourses, deriveQuickActions } from "./src/services/course-service";
+import { activeCourses, deriveQuickActions, isInPersonLike } from "./src/services/course-service";
 import { updateDashboardFile } from "./src/services/dashboard-file-service";
+import { pendingCanvasNotePath } from "./src/services/canvas-match";
+import { populateExistingNote } from "./src/services/template-service";
 import type { CanvasSyncMatch, OptionalPluginStatus } from "./src/types";
+
+/** A just-created file is only ever "upgraded" from a pending Canvas-event
+ * placeholder if its content is at most this long — a cheap guard against
+ * clobbering something unrelated that coincidentally landed at the exact
+ * same path at the exact same moment. */
+const MAX_BLANK_NOTE_LENGTH_TO_UPGRADE = 200;
 
 export default class CourseCommandCenterPlugin extends Plugin {
 	settings: PluginSettings = DEFAULT_SETTINGS;
 	noteIndex!: NoteIndexService;
 	private optionalPluginStatus: OptionalPluginStatus | null = null;
+	/** Vault path -> the Canvas event a note there would represent, for
+	 * events with no matching note yet. Populated whenever the dashboard
+	 * file is regenerated with fresh Canvas data. Lets clicking the
+	 * dashboard file's wikilink for such an event (which makes Obsidian
+	 * create a blank note) trigger populating that note properly instead of
+	 * leaving it blank. */
+	private pendingCanvasNotes = new Map<string, CanvasSyncMatch>();
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -66,6 +81,11 @@ export default class CourseCommandCenterPlugin extends Plugin {
 		this.registerEvent(this.app.metadataCache.on("changed", () => this.noteIndex.requestRefresh()));
 		this.registerEvent(this.app.vault.on("delete", () => this.noteIndex.requestRefresh()));
 		this.registerEvent(this.app.vault.on("rename", () => this.noteIndex.requestRefresh()));
+		this.registerEvent(
+			this.app.vault.on("create", (file) => {
+				if (file instanceof TFile) void this.handlePossibleCanvasNoteCreation(file);
+			})
+		);
 	}
 
 	onunload(): void {
@@ -84,14 +104,71 @@ export default class CourseCommandCenterPlugin extends Plugin {
 	/** Regenerates the dashboard file, if one is configured, from the current
 	 * (already up to date — callers rebuild the index first if needed) note
 	 * index. No-ops silently when dashboardFilePath is empty; shows a Notice
-	 * on write failure (e.g. a path collision with an unrelated file). */
-	async updateDashboardFileIfConfigured(canvasMatches: CanvasSyncMatch[] = []): Promise<void> {
+	 * on write failure (e.g. a path collision with an unrelated file).
+	 *
+	 * `canvasMatches` — pass the full match list from a just-completed sync
+	 * to also refresh the pending-notes cache used by
+	 * handlePossibleCanvasNoteCreation; omit it (not just `[]`, which means
+	 * "sync ran and found nothing unmatched") for a plain Refresh with no
+	 * new Canvas data, which leaves the previous cache as-is. */
+	async updateDashboardFileIfConfigured(canvasMatches?: CanvasSyncMatch[]): Promise<void> {
+		if (canvasMatches) {
+			this.pendingCanvasNotes = new Map(
+				canvasMatches
+					.filter((match) => !match.matchedNote)
+					.map((match) => [pendingCanvasNotePath(match), match] as const)
+					.filter((entry): entry is [string, CanvasSyncMatch] => entry[0] !== null)
+			);
+		}
 		if (!this.settings.dashboardFilePath.trim()) return;
 		try {
-			await updateDashboardFile(this.app, this.noteIndex.getNotes(), activeCourses(this.settings.courses), this.settings, canvasMatches);
+			await updateDashboardFile(
+				this.app,
+				this.noteIndex.getNotes(),
+				activeCourses(this.settings.courses),
+				this.settings,
+				canvasMatches ?? []
+			);
 		} catch (error) {
 			new Notice(`Could not update the dashboard file: ${error instanceof Error ? error.message : "unknown error"}`);
 			console.error("Course Command Center: dashboard file update failed", error);
+		}
+	}
+
+	/** Fires on every new file in the vault. If it lands exactly where a
+	 * pending Canvas event's note would go — i.e. the user just clicked that
+	 * event's wikilink in the dashboard file, and Obsidian created the
+	 * resulting blank note — populate it with the real frontmatter/template
+	 * content instead of leaving it blank, then refresh. One-shot: the
+	 * pending entry is consumed whether or not the upgrade succeeds, so a
+	 * second file at the same path (after a rename/delete) is never
+	 * re-upgraded from stale data. */
+	private async handlePossibleCanvasNoteCreation(file: TFile): Promise<void> {
+		const match = this.pendingCanvasNotes.get(file.path);
+		this.pendingCanvasNotes.delete(file.path);
+		if (!match || !match.matchedCourse) return;
+
+		try {
+			const content = await this.app.vault.cachedRead(file);
+			if (content.trim().length > MAX_BLANK_NOTE_LENGTH_TO_UPGRADE) return;
+
+			await populateExistingNote(this.app, file, {
+				folder: "", // unused by populateExistingNote — the file's path is already fixed.
+				title: match.event.title,
+				course: match.matchedCourse,
+				artifactType: "assignment",
+				due: match.event.due ?? undefined,
+				id: match.event.uid,
+				templatesFolder: this.settings.templatesFolder,
+				templaterInstalled: this.getOptionalPluginStatus().templater,
+				isInPersonLike: isInPersonLike(match.matchedCourse),
+			});
+
+			this.noteIndex.rebuildNow();
+			void this.updateDashboardFileIfConfigured();
+			new Notice(`Filled in "${match.event.title}" from Canvas.`);
+		} catch (error) {
+			console.error("Course Command Center: failed to populate note created from a dashboard-file link", error);
 		}
 	}
 

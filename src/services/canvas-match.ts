@@ -1,5 +1,6 @@
 import type { CanvasSyncMatch, CourseConfig, IcsEvent, IndexedNote } from "../types";
-import { matchCourseByCode } from "./course-service";
+import { folderForArtifact, matchCourseByCode } from "./course-service";
+import { notePathFor } from "../utils/paths";
 
 function normalizeTitle(value: string): string {
 	return value.trim().toLowerCase().replace(/\s+/g, " ");
@@ -27,4 +28,16 @@ export function matchCanvasEvents(events: IcsEvent[], notes: IndexedNote[], cour
 		matches.push({ event, matchedCourse, matchedNote: byTitle });
 	}
 	return matches;
+}
+
+/** The vault path a note for this (still-unmatched) event would get if
+ * created as an "assignment" in its matched course — i.e. where clicking a
+ * wikilink to it would create a blank note. Both the dashboard file's link
+ * target and the plugin's pending-note cache key come from this one
+ * function so they can never drift apart. Only meaningful when
+ * matchedCourse is set; returns null otherwise. */
+export function pendingCanvasNotePath(match: CanvasSyncMatch): string | null {
+	if (!match.matchedCourse) return null;
+	const folder = folderForArtifact(match.matchedCourse, "assignment");
+	return notePathFor(folder, match.event.title);
 }

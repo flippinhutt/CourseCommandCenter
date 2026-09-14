@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { matchCanvasEvents } from "./canvas-match";
-import type { CourseConfig, IcsEvent, IndexedNote } from "../types";
+import { matchCanvasEvents, pendingCanvasNotePath } from "./canvas-match";
+import type { CanvasSyncMatch, CourseConfig, IcsEvent, IndexedNote } from "../types";
 
 function course(overrides: Partial<CourseConfig> = {}): CourseConfig {
 	return {
@@ -70,5 +70,28 @@ describe("matchCanvasEvents", () => {
 		const result = matchCanvasEvents([event()], [], [course()]);
 		expect(result[0].matchedNote).toBeNull();
 		expect(result[0].matchedCourse?.id).toBe("itse-1350");
+	});
+});
+
+describe("pendingCanvasNotePath", () => {
+	function match(overrides: Partial<CanvasSyncMatch> = {}): CanvasSyncMatch {
+		return { event: event(), matchedCourse: course(), matchedNote: null, ...overrides };
+	}
+
+	it("computes the assignment-folder path for the event's title", () => {
+		expect(pendingCanvasNotePath(match())).toBe("Course/Homework 3.md");
+	});
+
+	it("uses the course's mapped assignment folder when one is configured", () => {
+		const c = course({ folderMap: { assignment: "Course/Assignments" } });
+		expect(pendingCanvasNotePath(match({ matchedCourse: c }))).toBe("Course/Assignments/Homework 3.md");
+	});
+
+	it("returns null when there is no matched course", () => {
+		expect(pendingCanvasNotePath(match({ matchedCourse: null }))).toBeNull();
+	});
+
+	it("sanitizes a title with Windows-invalid characters", () => {
+		expect(pendingCanvasNotePath(match({ event: event({ title: "Quiz: Ch 1?" }) }))).toBe("Course/Quiz Ch 1.md");
 	});
 });

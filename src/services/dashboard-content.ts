@@ -2,11 +2,16 @@ import type { CanvasSyncMatch, CourseConfig, IndexedNote } from "../types";
 import { compareDueDates, daysFromToday, parseLocalDate } from "../utils/dates";
 import { DASHBOARD_FILE_MARKER } from "../constants";
 import { getCourseById } from "./course-service";
+import { pendingCanvasNotePath } from "./canvas-match";
 
 const ACTIVE_STATUSES = new Set(["not-started", "in-progress", "blocked", "reviewing"]);
 
-/** One row in the generated dashboard file: either a vault note (linkPath
- * set) or a Canvas event with no matching note yet (canvasUrl set). */
+/** One row in the generated dashboard file. `linkPath` is always the
+ * wikilink target: an existing note's path, or — for a Canvas event with no
+ * note yet — the path a note for it *would* get, so clicking the link
+ * creates it (Obsidian's native unresolved-link behavior; the plugin then
+ * populates the blank note it creates). `canvasUrl`, when present, is
+ * always a secondary "view on Canvas" link shown alongside. */
 export interface DashboardLine {
 	label: string;
 	due: string;
@@ -34,7 +39,7 @@ function fromUnmatchedCanvasEvent(match: CanvasSyncMatch): DashboardLine | null 
 		label: match.event.title,
 		due: match.event.due,
 		courseLabel: match.matchedCourse?.displayName ?? null,
-		linkPath: null,
+		linkPath: pendingCanvasNotePath(match),
 		canvasUrl: match.event.url,
 	};
 }
@@ -65,15 +70,9 @@ export function isWithinDays(due: string, days: number): boolean {
 
 function formatLine(line: DashboardLine): string {
 	const course = line.courseLabel ? ` (${line.courseLabel})` : "";
-	let link: string;
-	if (line.linkPath) {
-		link = `[[${line.linkPath.replace(/\.md$/i, "")}|${line.label}]]`;
-	} else if (line.canvasUrl) {
-		link = `[${line.label}](${line.canvasUrl})`;
-	} else {
-		link = line.label;
-	}
-	return `- ${link} — due ${line.due}${course}`;
+	const primary = line.linkPath ? `[[${line.linkPath.replace(/\.md$/i, "")}|${line.label}]]` : line.label;
+	const canvasSuffix = line.canvasUrl ? ` ([Canvas](${line.canvasUrl}))` : "";
+	return `- ${primary}${canvasSuffix} — due ${line.due}${course}`;
 }
 
 function section(title: string, items: DashboardLine[]): string {

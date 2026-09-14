@@ -178,9 +178,16 @@ Course Command Center" marker, the plugin refuses to touch it (shown as an
 error) rather than risk overwriting an unrelated note — pick a different
 path or move the existing file.
 
-An unmatched Canvas event (no vault note yet) still appears in the
-Deadlines/Current work/Do next sections as a plain link out to Canvas, even
-though clicking "Create note" for it in the sync review panel is optional.
+An unmatched Canvas event (no vault note yet) still appears in every
+relevant section — and its title **is a clickable wikilink**, not just plain
+text. Click it and Obsidian creates a note at exactly where that
+assignment's note would live (its course's configured folder); the plugin
+then fills in the frontmatter (`course`, `delivery`, `type: assignment`,
+`due`, `id`) and template content, the same way a quick action would, right
+after Obsidian creates the blank file. A secondary `(Canvas)` link next to
+it still opens the assignment on Canvas directly, and the "Create note"
+button in the sync review panel still works too — both are just alternate
+ways to get the same result as clicking the dashboard-file link.
 
 ## Canvas calendar sync (optional)
 
@@ -274,6 +281,13 @@ Excalidraw, Linter, QuickAdd, Obsidian Git. Status is shown in Settings.
   appends to each calendar event title — if your institution's Canvas
   instance formats that differently, or a course's code in Settings doesn't
   appear in it, those events won't match and won't be routed anywhere.
+- Clicking a dashboard-file Canvas link only auto-fills the resulting note
+  while that exact event is still in the plugin's in-memory pending list
+  (populated by the most recent sync or dashboard-file update; cleared on
+  an Obsidian restart). Click it long after the last sync — or after a
+  newer sync has moved on — and Obsidian still creates the note, but you
+  get a blank one instead of a filled-in one; run **Sync Canvas calendar**
+  again first if that happens.
 - Command-palette quick-action entries are (re-)registered when you add,
   remove, or edit a course/folder-map entry in Settings, but a command for
   a type you've since deleted only disappears after Obsidian restarts or

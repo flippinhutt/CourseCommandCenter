@@ -22,6 +22,15 @@ choice, and both shaped the module boundaries below:
 main.ts                          Plugin entry point: registers the view,
                                   commands, ribbon icon, settings tab, and
                                   vault/metadata-cache event listeners.
+                                  Also owns pendingCanvasNotes (an in-memory
+                                  path -> CanvasSyncMatch map, refreshed by
+                                  updateDashboardFileIfConfigured) and the
+                                  vault "create" listener that consults it:
+                                  clicking a dashboard-file wikilink for an
+                                  unmatched Canvas event makes Obsidian
+                                  create a blank note, and this is what
+                                  turns that blank note into a properly
+                                  templated one.
 src/
   settings.ts                    Settings tab UI only. Reads/writes
                                   PluginSettings via the plugin instance;
@@ -82,7 +91,14 @@ src/
                                   frontmatter itself so required fields are
                                   populated consistently regardless of
                                   template source; best-effort Templater
-                                  trigger.
+                                  trigger. resolveNoteContent does the pure
+                                  "what should this note contain" part;
+                                  createNoteFromTemplate (vault.create, for
+                                  a brand-new note) and populateExistingNote
+                                  (vault.modify, for a file Obsidian already
+                                  created — e.g. from an unresolved-wikilink
+                                  click) both build on it, sharing the same
+                                  template/frontmatter logic either way.
     fallback-templates.ts        Built-in Markdown body templates, one per
                                   artifact type. Body content only —
                                   frontmatter is template-service's job.
@@ -108,7 +124,14 @@ src/
                                   requestUrl/TFile (the "obsidian" package
                                   ships types only — importing any of its
                                   values outside the Obsidian runtime fails
-                                  at module load, not at the call site).
+                                  at module load, not at the call site). Also
+                                  has pendingCanvasNotePath, the one function
+                                  that decides where an unmatched event's
+                                  note would live — used by both
+                                  dashboard-content.ts (as the wikilink
+                                  target) and main.ts (as the pending-notes
+                                  cache key), so the two can never compute
+                                  different paths for the same event.
     canvas-sync-service.ts       Obsidian-API side of Canvas sync: fetches
                                   the ICS feed (requestUrl), applies a
                                   matched event's due date via

@@ -78,7 +78,7 @@ describe("buildDashboardLines", () => {
 		expect(buildDashboardLines(notes, [course()])).toEqual([]);
 	});
 
-	it("includes an unmatched Canvas event as a Canvas-linked line", () => {
+	it("gives an unmatched Canvas event a wikilink to where its note would be created, plus a Canvas link", () => {
 		const match: CanvasSyncMatch = {
 			event: { uid: "u1", title: "Homework 4", due: daysFromNowIso(2), courseCodeHint: "ITSE 1350", url: "https://canvas.example/x" },
 			matchedCourse: course(),
@@ -87,7 +87,7 @@ describe("buildDashboardLines", () => {
 		const lines = buildDashboardLines([], [course()], [match]);
 		expect(lines).toHaveLength(1);
 		expect(lines[0].canvasUrl).toBe("https://canvas.example/x");
-		expect(lines[0].linkPath).toBeNull();
+		expect(lines[0].linkPath).toBe("Course/Homework 4.md");
 	});
 
 	it("excludes a Canvas event that already has a matched note (avoids duplicates)", () => {
@@ -135,7 +135,7 @@ describe("buildDashboardMarkdown", () => {
 		expect(markdown).toContain("[[Course/Assignment 1|Assignment 1]]");
 	});
 
-	it("links an unmatched Canvas-only line as a plain Markdown link", () => {
+	it("renders an unmatched Canvas-only line as a create-note wikilink plus a secondary Canvas link", () => {
 		const match: CanvasSyncMatch = {
 			event: { uid: "u1", title: "Homework 4", due: daysFromNowIso(1), courseCodeHint: "ITSE 1350", url: "https://canvas.example/x" },
 			matchedCourse: course(),
@@ -143,6 +143,7 @@ describe("buildDashboardMarkdown", () => {
 		};
 		const lines = buildDashboardLines([], [course()], [match]);
 		const markdown = buildDashboardMarkdown(lines, 2, 7, "2026-09-14");
-		expect(markdown).toContain("[Homework 4](https://canvas.example/x)");
+		expect(markdown).toContain("[[Course/Homework 4|Homework 4]]");
+		expect(markdown).toContain("([Canvas](https://canvas.example/x))");
 	});
 });

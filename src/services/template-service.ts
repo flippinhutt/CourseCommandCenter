@@ -114,11 +114,17 @@ async function tryTriggerTemplater(app: App, file: TFile): Promise<void> {
 	}
 }
 
-export async function createNoteFromTemplate(app: App, params: CreateNoteParams): Promise<TFile> {
-	const path = normalizePath(notePathFor(params.folder, params.title));
-	const existing = app.vault.getAbstractFileByPath(path);
-	if (existing) throw new NoteAlreadyExistsError(path);
+interface ResolvedNoteContent {
+	content: string;
+	usedTemplateFile: boolean;
+}
 
+/** Figures out what a note's content should be — template file if one
+ * matches and exists, else a fallback body — plus regenerated frontmatter.
+ * Pure computation, no vault writes; callers decide whether to vault.create
+ * a new file or vault.modify one Obsidian already created (e.g. a blank
+ * note from clicking an unresolved wikilink). */
+async function resolveNoteContent(app: App, params: CreateNoteParams): Promise<ResolvedNoteContent> {
 	let body: string;
 	let usedTemplateFile = false;
 
@@ -148,13 +154,37 @@ export async function createNoteFromTemplate(app: App, params: CreateNoteParams)
 		id: params.id,
 	});
 
-	const file = await app.vault.create(path, frontmatter + body);
+	return { content: frontmatter + body, usedTemplateFile };
+}
+
+export async function createNoteFromTemplate(app: App, params: CreateNoteParams): Promise<TFile> {
+	const path = normalizePath(notePathFor(params.folder, params.title));
+	const existing = app.vault.getAbstractFileByPath(path);
+	if (existing) throw new NoteAlreadyExistsError(path);
+
+	const { content, usedTemplateFile } = await resolveNoteContent(app, params);
+	const file = await app.vault.create(path, content);
 
 	if (usedTemplateFile && params.templaterInstalled) {
 		await tryTriggerTemplater(app, file);
 	}
 
 	return file;
+}
+
+/** Populates an already-existing file (typically the blank note Obsidian
+ * just created because the user clicked an unresolved wikilink) with the
+ * same template resolution + frontmatter that createNoteFromTemplate would
+ * use for a brand-new note. Overwrites whatever's there — callers are
+ * expected to have already confirmed the file is safe to overwrite (e.g.
+ * freshly auto-created and still essentially empty). */
+export async function populateExistingNote(app: App, file: TFile, params: CreateNoteParams): Promise<void> {
+	const { content, usedTemplateFile } = await resolveNoteContent(app, params);
+	await app.vault.modify(file, content);
+
+	if (usedTemplateFile && params.templaterInstalled) {
+		await tryTriggerTemplater(app, file);
+	}
 }
 
 function buildFallbackBody(artifactType: string, title: string): string {
