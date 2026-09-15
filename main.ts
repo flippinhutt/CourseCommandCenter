@@ -53,8 +53,8 @@ export default class CourseCommandCenterPlugin extends Plugin {
 		});
 
 		this.addCommand({
-			id: "open-course-command-center",
-			name: "Open Course Command Center",
+			id: "open",
+			name: "Open",
 			callback: () => void this.activateView(),
 		});
 
@@ -65,8 +65,8 @@ export default class CourseCommandCenterPlugin extends Plugin {
 		});
 
 		this.addCommand({
-			id: "insert-course-command-center-block",
-			name: "Insert Course Command Center block into current note",
+			id: "insert-block",
+			name: "Insert block into current note",
 			editorCallback: (editor) => this.insertDashboardBlock(editor),
 		});
 
@@ -314,7 +314,7 @@ export default class CourseCommandCenterPlugin extends Plugin {
 			leaf = workspace.getLeaf("tab");
 			await leaf.setViewState({ type: PLUGIN_VIEW_TYPE, active: true });
 		}
-		workspace.revealLeaf(leaf);
+		await workspace.revealLeaf(leaf);
 	}
 
 	syncCanvasCalendar(): void {

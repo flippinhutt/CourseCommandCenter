@@ -15,7 +15,7 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 		containerEl.empty();
 		containerEl.addClass("course-command-center-settings");
 
-		containerEl.createEl("h2", { text: "Course Command Center" });
+		new Setting(containerEl).setName("Course Command Center").setHeading();
 
 		const datalist = containerEl.createEl("datalist", { attr: { id: ARTIFACT_TYPE_DATALIST_ID } });
 		for (const type of KNOWN_ARTIFACT_TYPES) datalist.createEl("option", { value: type });
@@ -128,7 +128,7 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 				})
 			);
 
-		containerEl.createEl("h3", { text: "Dashboard file (optional)" });
+		new Setting(containerEl).setName("Dashboard file (optional)").setHeading();
 		containerEl.createEl("p", {
 			text:
 				"Leave the path empty to disable. When set, this note is fully regenerated (Deadlines / Upcoming / " +
@@ -160,7 +160,7 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 				})
 			);
 
-		containerEl.createEl("h3", { text: "Canvas calendar sync (optional)" });
+		new Setting(containerEl).setName("Canvas calendar sync (optional)").setHeading();
 		containerEl.createEl("p", {
 			text:
 				"The plugin makes no network calls except this one, and only when you explicitly click Sync — " +
@@ -197,7 +197,7 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 					})
 			);
 
-		containerEl.createEl("h3", { text: "Courses" });
+		new Setting(containerEl).setName("Courses").setHeading();
 
 		for (const course of this.plugin.settings.courses) {
 			this.renderCourse(containerEl, course);
@@ -224,21 +224,21 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 			})
 		);
 
-		containerEl.createEl("h3", { text: "Optional plugin detection" });
+		new Setting(containerEl).setName("Optional plugin detection").setHeading();
 		const statusEl = containerEl.createDiv({ cls: "course-command-center-plugin-status" });
 		const status = this.plugin.getOptionalPluginStatus();
 		for (const [key, installed] of Object.entries(status)) {
 			statusEl.createEl("div", { text: `${key}: ${installed ? "installed" : "not installed"}` });
 		}
 
-		containerEl.createEl("h3", { text: "Reset" });
+		new Setting(containerEl).setName("Reset").setHeading();
 		new Setting(containerEl)
 			.setName("Reset to defaults")
 			.setDesc("Restores default courses and settings. This does not touch any notes.")
 			.addButton((button) =>
 				button
 					.setButtonText("Reset")
-					.setWarning()
+					.setDestructive()
 					.onClick(async () => {
 						if (!confirm("Reset Course Command Center settings to defaults? This does not affect vault notes.")) {
 							return;
@@ -251,7 +251,7 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 
 	private renderCourse(containerEl: HTMLElement, course: CourseConfig): void {
 		const wrapper = containerEl.createDiv({ cls: "course-command-center-course-editor" });
-		wrapper.createEl("h4", { text: course.displayName || course.code || "Course" });
+		new Setting(wrapper).setName(course.displayName || course.code || "Course").setHeading();
 
 		new Setting(wrapper).setName("Course code").addText((text) =>
 			text.setValue(course.code).onChange(async (value) => {
@@ -382,7 +382,7 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 		new Setting(wrapper).addButton((button) =>
 			button
 				.setButtonText("Remove course")
-				.setWarning()
+				.setDestructive()
 				.onClick(async () => {
 					if (!confirm(`Remove ${course.displayName || course.code} from Course Command Center? This does not delete any notes.`)) {
 						return;

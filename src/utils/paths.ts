@@ -1,4 +1,4 @@
-// eslint-disable-next-line no-control-regex
+// eslint-disable-next-line no-control-regex -- control chars 0x00-0x1f are invalid in Windows file names
 const WINDOWS_INVALID_CHARS = /[<>:"/\\|?*\x00-\x1f]/g;
 const WINDOWS_RESERVED_NAMES = /^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])$/i;
 const TRAILING_DOTS_SPACES = /[. ]+$/;

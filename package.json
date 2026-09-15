@@ -1,6 +1,6 @@
 {
 	"name": "course-command-center",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Delivery-aware academic dashboard and workflow layer for an Obsidian course vault.",
 	"main": "main.js",
 	"scripts": {
