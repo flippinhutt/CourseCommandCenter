@@ -17,7 +17,7 @@
 		"url": "https://github.com/flippinhutt/CourseCommandCenter/issues"
 	},
 	"homepage": "https://github.com/flippinhutt/CourseCommandCenter#readme",
-	"author": "Ryan Hutto",
+	"author": "flippinhutt",
 	"license": "MIT",
 	"devDependencies": {
 		"@types/node": "^20.11.0",

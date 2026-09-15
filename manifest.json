@@ -4,7 +4,7 @@
 	"version": "0.1.1",
 	"minAppVersion": "1.7.2",
 	"description": "Delivery-aware academic dashboard and workflow layer over a Markdown course vault. Local-first, no network calls.",
-	"author": "Ryan Hutto",
+	"author": "flippinhutt",
 	"authorUrl": "https://github.com/flippinhutt",
 	"isDesktopOnly": false
 }
