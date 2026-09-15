@@ -2,6 +2,7 @@ import { App, PluginSettingTab, Setting } from "obsidian";
 import type CourseCommandCenterPlugin from "../main";
 import type { CourseConfig, Delivery } from "./types";
 import { KNOWN_ARTIFACT_TYPES } from "./constants";
+import { confirmDialog } from "./modals/confirm-modal";
 
 const ARTIFACT_TYPE_DATALIST_ID = "course-command-center-artifact-type-suggestions";
 
@@ -14,8 +15,6 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 		containerEl.addClass("course-command-center-settings");
-
-		new Setting(containerEl).setName("Course Command Center").setHeading();
 
 		const datalist = containerEl.createEl("datalist", { attr: { id: ARTIFACT_TYPE_DATALIST_ID } });
 		for (const type of KNOWN_ARTIFACT_TYPES) datalist.createEl("option", { value: type });
@@ -238,11 +237,13 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 			.addButton((button) =>
 				button
 					.setButtonText("Reset")
-					.setDestructive()
+					.setWarning()
 					.onClick(async () => {
-						if (!confirm("Reset Course Command Center settings to defaults? This does not affect vault notes.")) {
-							return;
-						}
+						const confirmed = await confirmDialog(
+							this.app,
+							"Reset Course Command Center settings to defaults? This does not affect vault notes."
+						);
+						if (!confirmed) return;
 						await this.plugin.resetSettingsToDefault();
 						this.display();
 					})
@@ -382,11 +383,13 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 		new Setting(wrapper).addButton((button) =>
 			button
 				.setButtonText("Remove course")
-				.setDestructive()
+				.setWarning()
 				.onClick(async () => {
-					if (!confirm(`Remove ${course.displayName || course.code} from Course Command Center? This does not delete any notes.`)) {
-						return;
-					}
+					const confirmed = await confirmDialog(
+						this.app,
+						`Remove ${course.displayName || course.code} from Course Command Center? This does not delete any notes.`
+					);
+					if (!confirmed) return;
 					this.plugin.settings.courses = this.plugin.settings.courses.filter((c) => c.id !== course.id);
 					await this.plugin.saveSettings();
 					this.plugin.registerQuickActionCommands();

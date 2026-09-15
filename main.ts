@@ -210,7 +210,7 @@ export default class CourseCommandCenterPlugin extends Plugin {
 				const notePath = normalizePath(`${linkMatch[1]}.md`);
 				const noteFile = this.app.vault.getAbstractFileByPath(notePath);
 				if (noteFile instanceof TFile) {
-					await this.app.fileManager.processFrontMatter(noteFile, (fm) => {
+					await this.app.fileManager.processFrontMatter(noteFile, (fm: { status?: string }) => {
 						fm.status = "complete";
 					});
 					markedAny = true;
@@ -302,7 +302,7 @@ export default class CourseCommandCenterPlugin extends Plugin {
 	}
 
 	async resetSettingsToDefault(): Promise<void> {
-		this.settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+		this.settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS)) as PluginSettings;
 		await this.saveSettings();
 		this.noteIndex.requestRefresh();
 	}

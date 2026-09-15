@@ -109,7 +109,7 @@ export class AssignmentDetailModal extends Modal {
 			.addDropdown((dropdown) => {
 				for (const status of STATUS_OPTIONS) dropdown.addOption(status, statusLabel(status));
 				dropdown.setValue(this.note.props.status ?? "not-started").onChange(async (value) => {
-					await this.app.fileManager.processFrontMatter(file, (fm) => {
+					await this.app.fileManager.processFrontMatter(file, (fm: { status?: NoteStatus }) => {
 						fm.status = value as NoteStatus;
 					});
 					this.note.props.status = value as NoteStatus;

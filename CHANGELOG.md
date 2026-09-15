@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/); dates are UTC.
 
-## [Unreleased]
+## [0.1.2] - 2026-09-14
 
 ### Added
 
@@ -58,6 +58,16 @@ follows [Keep a Changelog](https://keepachangelog.com/); dates are UTC.
 - Checking a box in the dashboard file only ever worked for note-backed
   lines; an unmatched Canvas event's box was a permanent no-op. It's now a
   real dismissal (see "Checked-off Canvas items" above).
+- Settings tab's top-level heading duplicated the plugin's own name
+  (Obsidian already shows it); removed.
+- Destructive buttons (Reset settings, Remove course) used `setDestructive()`,
+  an Obsidian API newer than this plugin's declared `minAppVersion`; switched
+  to `setWarning()`, supported since Obsidian 0.11.0.
+- Reset settings / Remove course confirmations used the browser's `confirm()`
+  dialog; replaced with an in-app confirm modal.
+- Several `processFrontMatter` callbacks and one undocumented-API access
+  (Templater detection) were typed as `any`, tripping unsafe-access lint
+  rules; given explicit narrow types instead.
 
 ## [0.1.0] - 2026-09-14
 

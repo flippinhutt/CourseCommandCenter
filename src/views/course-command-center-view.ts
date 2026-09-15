@@ -321,7 +321,7 @@ export class CourseCommandCenterView extends ItemView {
 		const file = this.app.vault.getAbstractFileByPath(note.path);
 		if (!(file instanceof TFile)) return;
 		try {
-			await this.app.fileManager.processFrontMatter(file, (fm) => {
+			await this.app.fileManager.processFrontMatter(file, (fm: { status?: string }) => {
 				fm.status = "complete";
 			});
 			this.plugin.noteIndex.rebuildNow();
@@ -494,7 +494,7 @@ export class CourseCommandCenterView extends ItemView {
 				link.addEventListener("click", (evt) => {
 					evt.preventDefault();
 					const abstractFile = this.app.vault.getAbstractFileByPath(folder);
-					if (abstractFile) this.app.workspace.trigger("reveal-file-in-explorer" as any, abstractFile);
+					if (abstractFile) this.app.workspace.trigger("reveal-file-in-explorer", abstractFile);
 				});
 			}
 		}

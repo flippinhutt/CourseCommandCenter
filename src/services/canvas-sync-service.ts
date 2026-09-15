@@ -19,8 +19,8 @@ export async function applyCanvasDueDate(app: App, match: CanvasSyncMatch): Prom
 	const file = app.vault.getAbstractFileByPath(match.matchedNote.path);
 	if (!(file instanceof TFile)) return false;
 
-	await app.fileManager.processFrontMatter(file, (fm) => {
-		fm.due = match.event.due;
+	await app.fileManager.processFrontMatter(file, (fm: { due?: string; id?: string }) => {
+		fm.due = match.event.due ?? undefined;
 		if (!fm.id) fm.id = match.event.uid;
 	});
 	return true;

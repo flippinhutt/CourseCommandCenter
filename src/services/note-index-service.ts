@@ -56,7 +56,7 @@ export class NoteIndexService {
 
 	private indexFile(file: TFile, courses: CourseConfig[]): IndexedNote {
 		const cache = this.app.metadataCache.getFileCache(file);
-		const props = readNoteProperties(cache?.frontmatter as Record<string, unknown> | undefined);
+		const props = readNoteProperties(cache?.frontmatter);
 		const course = matchCourseByCode(props.course, courses);
 		return {
 			path: file.path,

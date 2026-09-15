@@ -8,7 +8,7 @@ export function readNoteProperties(raw: Record<string, unknown> | undefined | nu
 	const props: NoteProperties = {};
 	if (typeof raw.course === "string") props.course = raw.course;
 	if (typeof raw.delivery === "string") props.delivery = raw.delivery as NoteProperties["delivery"];
-	if (typeof raw.type === "string") props.type = raw.type as NoteProperties["type"];
+	if (typeof raw.type === "string") props.type = raw.type;
 	if (typeof raw.status === "string") props.status = raw.status as NoteProperties["status"];
 	if (raw.due != null) props.due = stringifyDateLike(raw.due);
 	if (raw.opens != null) props.opens = stringifyDateLike(raw.opens);

@@ -101,9 +101,15 @@ export interface CreateNoteParams {
 
 /** Attempts a best-effort, documented-API-only Templater trigger. Never
  * throws; leaves the file's content untouched if the API isn't available. */
+interface AppWithPlugins extends App {
+	plugins?: {
+		plugins?: Record<string, { templater?: { overwrite_file_templates?: (file: TFile) => Promise<void> } }>;
+	};
+}
+
 async function tryTriggerTemplater(app: App, file: TFile): Promise<void> {
 	try {
-		const templaterPlugin = (app as any).plugins?.plugins?.["templater-obsidian"];
+		const templaterPlugin = (app as AppWithPlugins).plugins?.plugins?.["templater-obsidian"];
 		const templater = templaterPlugin?.templater;
 		if (templater && typeof templater.overwrite_file_templates === "function") {
 			await templater.overwrite_file_templates(file);
