@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/); dates are UTC.
 
+## [0.1.4] - 2026-09-14
+
+### Changed
+
+- Bumped `minAppVersion` to 1.13.0 and migrated the settings tab to
+  Obsidian's declarative settings API (`getSettingDefinitions()`).
+- Replaced deprecated `setWarning()` with `setDestructive()` on destructive
+  buttons (Reset, Remove course, and the confirm-dialog Confirm button).
+- Removed the `builtin-modules` dependency; the esbuild config now reads
+  Node's built-in module list from `node:module` directly.
+
 ## [0.1.2] - 2026-09-14
 
 ### Added

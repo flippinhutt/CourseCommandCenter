@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, PluginSettingTab, Setting, type SettingDefinitionItem, type SettingGroupItem } from "obsidian";
 import type CourseCommandCenterPlugin from "../main";
 import type { CourseConfig, Delivery } from "./types";
 import { KNOWN_ARTIFACT_TYPES } from "./constants";
@@ -11,243 +11,342 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 		super(app, plugin);
 	}
 
-	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
-		containerEl.addClass("course-command-center-settings");
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		this.containerEl.addClass("course-command-center-settings");
 
-		const datalist = containerEl.createEl("datalist", { attr: { id: ARTIFACT_TYPE_DATALIST_ID } });
-		for (const type of KNOWN_ARTIFACT_TYPES) datalist.createEl("option", { value: type });
+		const items: SettingDefinitionItem[] = [];
 
-		new Setting(containerEl)
-			.setName("Open at startup")
-			.setDesc("Open the Course Command Center view automatically when Obsidian starts.")
-			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.openAtStartup).onChange(async (value) => {
-					this.plugin.settings.openAtStartup = value;
-					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName("Scan entire vault")
-			.setDesc("Off (default): only scan configured course root folders. On: scan every Markdown note in the vault.")
-			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.scanEntireVault).onChange(async (value) => {
-					this.plugin.settings.scanEntireVault = value;
-					await this.plugin.saveSettings();
-					this.plugin.requestIndexRefresh();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName("Recent notes count")
-			.setDesc("How many notes to show in the Recently created section.")
-			.addText((text) =>
-				text.setValue(String(this.plugin.settings.recentNotesCount)).onChange(async (value) => {
-					const num = Number(value);
-					if (Number.isFinite(num) && num > 0) {
-						this.plugin.settings.recentNotesCount = Math.floor(num);
-						await this.plugin.saveSettings();
-					}
-				})
-			);
-
-		new Setting(containerEl)
-			.setName("Upcoming deadline window (days)")
-			.setDesc(
-				"How many days ahead counts as an upcoming deadline. Also drives the dashboard file's \"Upcoming\" section."
-			)
-			.addText((text) =>
-				text.setValue(String(this.plugin.settings.upcomingDeadlineWindowDays)).onChange(async (value) => {
-					const num = Number(value);
-					if (Number.isFinite(num) && num >= 0) {
-						this.plugin.settings.upcomingDeadlineWindowDays = Math.floor(num);
-						await this.plugin.saveSettings();
-					}
-				})
-			);
-
-		new Setting(containerEl)
-			.setName("Stale lecture window (days)")
-			.setDesc("Health check flags an in-person/hybrid course with no lecture note created in this many days.")
-			.addText((text) =>
-				text.setValue(String(this.plugin.settings.staleLectureWindowDays)).onChange(async (value) => {
-					const num = Number(value);
-					if (Number.isFinite(num) && num >= 0) {
-						this.plugin.settings.staleLectureWindowDays = Math.floor(num);
-						await this.plugin.saveSettings();
-					}
-				})
-			);
-
-		new Setting(containerEl)
-			.setName("Include checkbox tasks")
-			.setDesc("Include incomplete Markdown checkbox tasks in the dashboard.")
-			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.includeCheckboxTasks).onChange(async (value) => {
-					this.plugin.settings.includeCheckboxTasks = value;
-					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName("Templates folder")
-			.addText((text) =>
-				text.setValue(this.plugin.settings.templatesFolder).onChange(async (value) => {
-					this.plugin.settings.templatesFolder = value;
-					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName("Daily note folder")
-			.addText((text) =>
-				text.setValue(this.plugin.settings.dailyNoteFolder).onChange(async (value) => {
-					this.plugin.settings.dailyNoteFolder = value;
-					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName("Weekly review folder")
-			.addText((text) =>
-				text.setValue(this.plugin.settings.weeklyReviewFolder).onChange(async (value) => {
-					this.plugin.settings.weeklyReviewFolder = value;
-					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName("Inbox path")
-			.addText((text) =>
-				text.setValue(this.plugin.settings.inboxPath).onChange(async (value) => {
-					this.plugin.settings.inboxPath = value;
-					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl).setName("Dashboard file (optional)").setHeading();
-		containerEl.createEl("p", {
-			text:
-				"Leave the path empty to disable. When set, this note is fully regenerated (Deadlines / Upcoming / " +
-				"Do next sections) every time you click Refresh in the view, and after a Canvas sync — never automatically " +
-				"in the background. Manual edits to it are overwritten on the next update.",
-			cls: "setting-item-description",
+		items.push({
+			name: "",
+			searchable: false,
+			render: (setting) => {
+				setting.settingEl.style.display = "none";
+				const datalist = setting.settingEl.createEl("datalist", { attr: { id: ARTIFACT_TYPE_DATALIST_ID } });
+				for (const type of KNOWN_ARTIFACT_TYPES) datalist.createEl("option", { value: type });
+			},
 		});
-		new Setting(containerEl)
-			.setName("Dashboard file path")
-			.addText((text) =>
-				text
-					.setPlaceholder("e.g. Dashboard.md")
-					.setValue(this.plugin.settings.dashboardFilePath)
-					.onChange(async (value) => {
-						this.plugin.settings.dashboardFilePath = value.trim();
+
+		items.push({
+			name: "Open at startup",
+			desc: "Open the Course Command Center view automatically when Obsidian starts.",
+			render: (setting) => {
+				setting.addToggle((toggle) =>
+					toggle.setValue(this.plugin.settings.openAtStartup).onChange(async (value) => {
+						this.plugin.settings.openAtStartup = value;
 						await this.plugin.saveSettings();
 					})
-			);
-		new Setting(containerEl)
-			.setName("Do next window (days)")
-			.setDesc('The dashboard file\'s "Do next" section: due today, overdue, or within this many days.')
-			.addText((text) =>
-				text.setValue(String(this.plugin.settings.doNextWindowDays)).onChange(async (value) => {
-					const num = Number(value);
-					if (Number.isFinite(num) && num >= 0) {
-						this.plugin.settings.doNextWindowDays = Math.floor(num);
-						await this.plugin.saveSettings();
-					}
-				})
-			);
-
-		new Setting(containerEl).setName("Canvas calendar sync (optional)").setHeading();
-		containerEl.createEl("p", {
-			text:
-				"The plugin makes no network calls except this one, and only when you explicitly click Sync — " +
-				"never automatically. Find your feed URL in Canvas: Calendar → Calendar Feed (bottom-left), then copy the ICS link. " +
-				"Treat it like a password — anyone with the URL can see your Canvas calendar.",
-			cls: "setting-item-description",
+				);
+			},
 		});
-		new Setting(containerEl)
-			.setName("Canvas calendar feed URL")
-			.addText((text) =>
-				text
-					.setPlaceholder("https://<school>.instructure.com/feeds/calendars/user_....ics")
-					.setValue(this.plugin.settings.canvasIcsUrl)
-					.onChange(async (value) => {
-						this.plugin.settings.canvasIcsUrl = value.trim();
+
+		items.push({
+			name: "Scan entire vault",
+			desc: "Off (default): only scan configured course root folders. On: scan every Markdown note in the vault.",
+			render: (setting) => {
+				setting.addToggle((toggle) =>
+					toggle.setValue(this.plugin.settings.scanEntireVault).onChange(async (value) => {
+						this.plugin.settings.scanEntireVault = value;
+						await this.plugin.saveSettings();
+						this.plugin.requestIndexRefresh();
+					})
+				);
+			},
+		});
+
+		items.push({
+			name: "Recent notes count",
+			desc: "How many notes to show in the Recently created section.",
+			render: (setting) => {
+				setting.addText((text) =>
+					text.setValue(String(this.plugin.settings.recentNotesCount)).onChange(async (value) => {
+						const num = Number(value);
+						if (Number.isFinite(num) && num > 0) {
+							this.plugin.settings.recentNotesCount = Math.floor(num);
+							await this.plugin.saveSettings();
+						}
+					})
+				);
+			},
+		});
+
+		items.push({
+			name: "Upcoming deadline window (days)",
+			desc: "How many days ahead counts as an upcoming deadline. Also drives the dashboard file's \"Upcoming\" section.",
+			render: (setting) => {
+				setting.addText((text) =>
+					text.setValue(String(this.plugin.settings.upcomingDeadlineWindowDays)).onChange(async (value) => {
+						const num = Number(value);
+						if (Number.isFinite(num) && num >= 0) {
+							this.plugin.settings.upcomingDeadlineWindowDays = Math.floor(num);
+							await this.plugin.saveSettings();
+						}
+					})
+				);
+			},
+		});
+
+		items.push({
+			name: "Stale lecture window (days)",
+			desc: "Health check flags an in-person/hybrid course with no lecture note created in this many days.",
+			render: (setting) => {
+				setting.addText((text) =>
+					text.setValue(String(this.plugin.settings.staleLectureWindowDays)).onChange(async (value) => {
+						const num = Number(value);
+						if (Number.isFinite(num) && num >= 0) {
+							this.plugin.settings.staleLectureWindowDays = Math.floor(num);
+							await this.plugin.saveSettings();
+						}
+					})
+				);
+			},
+		});
+
+		items.push({
+			name: "Include checkbox tasks",
+			desc: "Include incomplete Markdown checkbox tasks in the dashboard.",
+			render: (setting) => {
+				setting.addToggle((toggle) =>
+					toggle.setValue(this.plugin.settings.includeCheckboxTasks).onChange(async (value) => {
+						this.plugin.settings.includeCheckboxTasks = value;
 						await this.plugin.saveSettings();
 					})
-			);
+				);
+			},
+		});
+
+		items.push({
+			name: "Templates folder",
+			render: (setting) => {
+				setting.addText((text) =>
+					text.setValue(this.plugin.settings.templatesFolder).onChange(async (value) => {
+						this.plugin.settings.templatesFolder = value;
+						await this.plugin.saveSettings();
+					})
+				);
+			},
+		});
+
+		items.push({
+			name: "Daily note folder",
+			render: (setting) => {
+				setting.addText((text) =>
+					text.setValue(this.plugin.settings.dailyNoteFolder).onChange(async (value) => {
+						this.plugin.settings.dailyNoteFolder = value;
+						await this.plugin.saveSettings();
+					})
+				);
+			},
+		});
+
+		items.push({
+			name: "Weekly review folder",
+			render: (setting) => {
+				setting.addText((text) =>
+					text.setValue(this.plugin.settings.weeklyReviewFolder).onChange(async (value) => {
+						this.plugin.settings.weeklyReviewFolder = value;
+						await this.plugin.saveSettings();
+					})
+				);
+			},
+		});
+
+		items.push({
+			name: "Inbox path",
+			render: (setting) => {
+				setting.addText((text) =>
+					text.setValue(this.plugin.settings.inboxPath).onChange(async (value) => {
+						this.plugin.settings.inboxPath = value;
+						await this.plugin.saveSettings();
+					})
+				);
+			},
+		});
+
+		items.push({
+			type: "group",
+			heading: "Dashboard file (optional)",
+			items: [
+				{
+					name: "",
+					searchable: false,
+					render: (setting) => {
+						setting.settingEl.createEl("p", {
+							text:
+								"Leave the path empty to disable. When set, this note is fully regenerated (Deadlines / Upcoming / " +
+								"Do next sections) every time you click Refresh in the view, and after a Canvas sync — never automatically " +
+								"in the background. Manual edits to it are overwritten on the next update.",
+							cls: "setting-item-description",
+						});
+					},
+				},
+				{
+					name: "Dashboard file path",
+					render: (setting) => {
+						setting.addText((text) =>
+							text
+								.setPlaceholder("e.g. Dashboard.md")
+								.setValue(this.plugin.settings.dashboardFilePath)
+								.onChange(async (value) => {
+									this.plugin.settings.dashboardFilePath = value.trim();
+									await this.plugin.saveSettings();
+								})
+						);
+					},
+				},
+				{
+					name: "Do next window (days)",
+					desc: 'The dashboard file\'s "Do next" section: due today, overdue, or within this many days.',
+					render: (setting) => {
+						setting.addText((text) =>
+							text.setValue(String(this.plugin.settings.doNextWindowDays)).onChange(async (value) => {
+								const num = Number(value);
+								if (Number.isFinite(num) && num >= 0) {
+									this.plugin.settings.doNextWindowDays = Math.floor(num);
+									await this.plugin.saveSettings();
+								}
+							})
+						);
+					},
+				},
+			],
+		});
+
+		items.push({
+			type: "group",
+			heading: "Canvas calendar sync (optional)",
+			items: [
+				{
+					name: "",
+					searchable: false,
+					render: (setting) => {
+						setting.settingEl.createEl("p", {
+							text:
+								"The plugin makes no network calls except this one, and only when you explicitly click Sync — " +
+								"never automatically. Find your feed URL in Canvas: Calendar → Calendar Feed (bottom-left), then copy the ICS link. " +
+								"Treat it like a password — anyone with the URL can see your Canvas calendar.",
+							cls: "setting-item-description",
+						});
+					},
+				},
+				{
+					name: "Canvas calendar feed URL",
+					render: (setting) => {
+						setting.addText((text) =>
+							text
+								.setPlaceholder("https://<school>.instructure.com/feeds/calendars/user_....ics")
+								.setValue(this.plugin.settings.canvasIcsUrl)
+								.onChange(async (value) => {
+									this.plugin.settings.canvasIcsUrl = value.trim();
+									await this.plugin.saveSettings();
+								})
+						);
+					},
+				},
+			],
+		});
 
 		const dismissedCount = this.plugin.settings.completedCanvasEventUids.length;
-		new Setting(containerEl)
-			.setName("Checked-off Canvas items")
-			.setDesc(
+		items.push({
+			name: "Checked-off Canvas items",
+			desc:
 				`${dismissedCount} unmatched Canvas item${dismissedCount === 1 ? "" : "s"} currently checked off without a note. ` +
-					"Clearing brings them all back into Do next / Due today / Upcoming."
-			)
-			.addButton((button) =>
-				button
-					.setButtonText("Clear checked-off items")
-					.setDisabled(dismissedCount === 0)
-					.onClick(async () => {
-						await this.plugin.clearCompletedCanvasEvents();
-						this.display();
+				"Clearing brings them all back into Do next / Due today / Upcoming.",
+			render: (setting) => {
+				setting.addButton((button) =>
+					button
+						.setButtonText("Clear checked-off items")
+						.setDisabled(dismissedCount === 0)
+						.onClick(async () => {
+							await this.plugin.clearCompletedCanvasEvents();
+							this.update();
+						})
+				);
+			},
+		});
+
+		const courseItems: SettingGroupItem[] = this.plugin.settings.courses.map((course) => ({
+			name: course.displayName || course.code || "Course",
+			searchable: false,
+			render: (setting) => {
+				setting.settingEl.empty();
+				setting.settingEl.removeClass("setting-item");
+				this.renderCourse(setting.settingEl, course);
+			},
+		}));
+		courseItems.push({
+			name: "",
+			searchable: false,
+			render: (setting) => {
+				setting.addButton((button) =>
+					button.setButtonText("Add course").onClick(async () => {
+						this.plugin.settings.courses.push({
+							id: `course-${Date.now()}`,
+							code: "",
+							displayName: "New Course",
+							delivery: "online",
+							rootFolder: "",
+							meetingDays: "",
+							meetingTime: "",
+							location: "",
+							canvasUrl: "",
+							active: true,
+							folderMap: {},
+						});
+						await this.plugin.saveSettings();
+						this.plugin.registerQuickActionCommands();
+						this.update();
 					})
-			);
+				);
+			},
+		});
+		items.push({ type: "group", heading: "Courses", items: courseItems });
 
-		new Setting(containerEl).setName("Courses").setHeading();
+		items.push({
+			type: "group",
+			heading: "Optional plugin detection",
+			items: [
+				{
+					name: "",
+					searchable: false,
+					render: (setting) => {
+						setting.settingEl.removeClass("setting-item");
+						const status = this.plugin.getOptionalPluginStatus();
+						for (const [key, installed] of Object.entries(status)) {
+							setting.settingEl.createEl("div", { text: `${key}: ${installed ? "installed" : "not installed"}` });
+						}
+					},
+				},
+			],
+		});
 
-		for (const course of this.plugin.settings.courses) {
-			this.renderCourse(containerEl, course);
-		}
-
-		new Setting(containerEl).addButton((button) =>
-			button.setButtonText("Add course").onClick(async () => {
-				this.plugin.settings.courses.push({
-					id: `course-${Date.now()}`,
-					code: "",
-					displayName: "New Course",
-					delivery: "online",
-					rootFolder: "",
-					meetingDays: "",
-					meetingTime: "",
-					location: "",
-					canvasUrl: "",
-					active: true,
-					folderMap: {},
-				});
-				await this.plugin.saveSettings();
-				this.plugin.registerQuickActionCommands();
-				this.display();
-			})
-		);
-
-		new Setting(containerEl).setName("Optional plugin detection").setHeading();
-		const statusEl = containerEl.createDiv({ cls: "course-command-center-plugin-status" });
-		const status = this.plugin.getOptionalPluginStatus();
-		for (const [key, installed] of Object.entries(status)) {
-			statusEl.createEl("div", { text: `${key}: ${installed ? "installed" : "not installed"}` });
-		}
-
-		new Setting(containerEl).setName("Reset").setHeading();
-		new Setting(containerEl)
-			.setName("Reset to defaults")
-			.setDesc("Restores default courses and settings. This does not touch any notes.")
-			.addButton((button) =>
-				button
-					.setButtonText("Reset")
-					.setWarning()
-					.onClick(async () => {
-						const confirmed = await confirmDialog(
-							this.app,
-							"Reset Course Command Center settings to defaults? This does not affect vault notes."
+		items.push({
+			type: "group",
+			heading: "Reset",
+			items: [
+				{
+					name: "Reset to defaults",
+					desc: "Restores default courses and settings. This does not touch any notes.",
+					render: (setting) => {
+						setting.addButton((button) =>
+							button
+								.setButtonText("Reset")
+								.setDestructive()
+								.onClick(async () => {
+									const confirmed = await confirmDialog(
+										this.app,
+										"Reset Course Command Center settings to defaults? This does not affect vault notes."
+									);
+									if (!confirmed) return;
+									await this.plugin.resetSettingsToDefault();
+									this.update();
+								})
 						);
-						if (!confirmed) return;
-						await this.plugin.resetSettingsToDefault();
-						this.display();
-					})
-			);
+					},
+				},
+			],
+		});
+
+		return items;
 	}
 
 	private renderCourse(containerEl: HTMLElement, course: CourseConfig): void {
@@ -349,7 +448,7 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 							delete course.folderMap[type];
 							await this.plugin.saveSettings();
 							this.plugin.registerQuickActionCommands();
-							this.display();
+							this.update();
 						})
 				);
 		}
@@ -376,14 +475,14 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 					course.folderMap[newTypeValue] = newFolderValue;
 					await this.plugin.saveSettings();
 					this.plugin.registerQuickActionCommands();
-					this.display();
+					this.update();
 				})
 			);
 
 		new Setting(wrapper).addButton((button) =>
 			button
 				.setButtonText("Remove course")
-				.setWarning()
+				.setDestructive()
 				.onClick(async () => {
 					const confirmed = await confirmDialog(
 						this.app,
@@ -393,7 +492,7 @@ export class CourseCommandCenterSettingTab extends PluginSettingTab {
 					this.plugin.settings.courses = this.plugin.settings.courses.filter((c) => c.id !== course.id);
 					await this.plugin.saveSettings();
 					this.plugin.registerQuickActionCommands();
-					this.display();
+					this.update();
 				})
 		);
 	}

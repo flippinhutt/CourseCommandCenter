@@ -1,6 +1,6 @@
 {
 	"name": "course-command-center",
-	"version": "0.1.2",
+	"version": "0.1.4",
 	"description": "Delivery-aware academic dashboard and workflow layer for an Obsidian course vault.",
 	"main": "main.js",
 	"scripts": {
@@ -23,7 +23,6 @@
 		"@types/node": "^20.11.0",
 		"@typescript-eslint/eslint-plugin": "^7.0.0",
 		"@typescript-eslint/parser": "^7.0.0",
-		"builtin-modules": "^3.3.0",
 		"esbuild": "^0.20.0",
 		"eslint": "^8.57.0",
 		"obsidian": "^1.5.7",

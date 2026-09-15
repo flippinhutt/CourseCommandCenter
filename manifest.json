@@ -1,8 +1,8 @@
 {
 	"id": "course-command-center",
 	"name": "Course Command Center",
-	"version": "0.1.2",
-	"minAppVersion": "1.7.2",
+	"version": "0.1.4",
+	"minAppVersion": "1.13.0",
 	"description": "Delivery-aware academic dashboard and workflow layer over a Markdown course vault. Local-first, no network calls.",
 	"author": "flippinhutt",
 	"authorUrl": "https://github.com/flippinhutt",
